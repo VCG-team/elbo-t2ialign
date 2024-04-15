@@ -1,0 +1,16 @@
+# editor config
+.vscode
+
+# cache
+**/__pycache__/
+
+# dataset
+COCO2014
+VOCdevkit
+data
+
+# output
+output
+
+# config
+config
