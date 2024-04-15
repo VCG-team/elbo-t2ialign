@@ -75,11 +75,11 @@ class COCOClsDataset(Dataset):
         name = self.img_name_list[idx]
         if self.train:
             img = PIL.Image.open(
-                os.path.join(self.coco_root, "train2014", name + ".jpg")
+                os.path.join(self.coco_root, "images/train2014", name + ".jpg")
             ).convert("RGB")
         else:
             img = PIL.Image.open(
-                os.path.join(self.coco_root, "val2014", name + ".jpg")
+                os.path.join(self.coco_root, "images/val2014", name + ".jpg")
             ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
 

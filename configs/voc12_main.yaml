@@ -1,0 +1,71 @@
+# config for voc12 dataset
+dataset: "voc12"
+
+# input/output/model paths
+data_root: "./VOCdevkit/VOC2012"
+data_name_list: "./data/voc12_train_id.txt"
+output_path: "./output/cov12"
+diffusion_path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
+blip_path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
+
+# model settings
+device: 4
+seed: 4307
+use_blip: True
+print_prompt: False # 是否打印prompt
+self_times: 1 # 乘以self_aggre的次数
+cross_threshold: 0.4 # cross的二极分化阈值
+times: [1, 25, 50, 75, 100, 125, 150]
+
+# dataset metainfo
+category:
+  [
+    "plane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "buses",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "table",
+    "dog",
+    "horse",
+    "motorbike",
+    "people",
+    "plant",
+    "sheep",
+    "sofa",
+    "train",
+    "monitor",
+  ]
+bg_category:
+  [
+    "ground",
+    "land",
+    "grass",
+    "tree",
+    "building",
+    "wall",
+    "sky",
+    "lake",
+    "water",
+    "river",
+    "sea",
+    "railway",
+    "railroad",
+    "keyboard",
+    "helmet",
+    "cloud",
+    "house",
+    "mountain",
+    "ocean",
+    "road",
+    "rock",
+    "street",
+    "valley",
+    "bridge",
+    "sign",
+  ]

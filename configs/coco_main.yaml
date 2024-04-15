@@ -1,0 +1,131 @@
+# config for coco dataset
+dataset: "coco"
+
+# input/output/model paths
+data_root: "./COCO2014"
+data_name_list: "./data/coco_train_id.txt"
+output_path: "./output/coco"
+diffusion_path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
+blip_path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
+
+# model settings
+device: 1
+seed: 4307
+use_blip: True
+print_prompt: False # 是否打印prompt
+self_times: 1 # 乘以self_aggre的次数
+cross_threshold: 0.4 # cross的二极分化阈值
+times: [1, 25, 50, 75, 100, 125, 150]
+
+# dataset metainfo
+category:
+  [
+    "person",
+    "bicycle",
+    "car",
+    "motorbike",
+    "aeroplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "sofa",
+    "pottedplant",
+    "bed",
+    "diningtable",
+    "toilet",
+    "tvmonitor",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
+    "toothbrus",
+  ]
+bg_category:
+  [
+    "ground",
+    "land",
+    "grass",
+    "tree",
+    "building",
+    "wall",
+    "sky",
+    "lake",
+    "water",
+    "river",
+    "sea",
+    "railway",
+    "railroad",
+    "keyboard",
+    "helmet",
+    "cloud",
+    "house",
+    "mountain",
+    "ocean",
+    "road",
+    "rock",
+    "street",
+    "valley",
+    "bridge",
+    "sign",
+  ]

@@ -7,7 +7,6 @@
 # dataset
 COCO2014
 VOCdevkit
-data
 
 # output
 output
