@@ -13,7 +13,7 @@ TN = Optional[T]
 TS = Union[Tuple[T, ...], List[T]]
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def get_text_embeddings(
     pipe: StableDiffusionPipeline, text: str, device=torch.device("cpu")
 ) -> T:
@@ -22,7 +22,7 @@ def get_text_embeddings(
     return embeddings
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def denormalize(image):
     image = (image / 2 + 0.5).clamp(0, 1)
     image = image.cpu().permute(0, 2, 3, 1).numpy()
@@ -30,7 +30,7 @@ def denormalize(image):
     return image[0]
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def decode(latent: T, pipe: StableDiffusionPipeline, im_cat: TN = None):
     scaling_factor = pipe.vae.config.scaling_factor
     image = pipe.vae.decode((1 / scaling_factor) * latent, return_dict=False)[0]

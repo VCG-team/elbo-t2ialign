@@ -15,7 +15,12 @@ from transformers import BlipForConditionalGeneration, BlipProcessor
 
 from datasets import COCOClsDataset, VOC12Dataset
 from utils.dds_utils import image_optimization
-from utils.ptp_utils import AttentionStore, generate_att_v2, register_attention_control
+from utils.ptp_utils import (
+    AttentionStore,
+    aggregate_self_att,
+    generate_att_v2,
+    register_attention_control,
+)
 
 
 # fix random seed
@@ -27,45 +32,6 @@ def same_seeds(seed):
     np.random.seed(seed)  # 保证后续使用random函数时，产生固定的随机数
     torch.backends.cudnn.benchmark = False  # GPU、网络结构固定，可设置为True
     torch.backends.cudnn.deterministic = True  # 固定网络结构
-
-
-def get_weight_ratio(weight_list):
-    sizes = []
-    for weights in weight_list:
-        sizes.append(np.sqrt(weights.shape[-2]))
-    denom = np.sum(sizes)
-    return sizes / denom
-
-
-def aggregate_self_att(controller):
-    self_att_8 = [att for att in controller.attention_store["mid_self"]]
-    self_att_16 = [att for att in controller.attention_store["up_self"][0:3]]
-    self_att_32 = [att for att in controller.attention_store["up_self"][3:6]]
-    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
-
-    weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
-    weight = get_weight_ratio(weight_list)
-    aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
-    for index, weights in enumerate(weight_list):
-        size = int(np.sqrt(weights.shape[-1]))
-        ratio = int(64 / size)
-        weights = weights.reshape(-1, size, size)
-        weights = (
-            F.interpolate(
-                weights.unsqueeze(0),
-                size=(64, 64),
-                mode="bilinear",
-                align_corners=False,
-            )
-            .squeeze()
-            .squeeze()
-        )
-        weights = weights.reshape(size, size, 64, 64)
-        weights = weights / torch.sum(weights, dim=(2, 3), keepdim=True)
-        weights = weights.repeat_interleave(ratio, dim=0)
-        weights = weights.repeat_interleave(ratio, dim=1)
-        aggre_weights += weights * weight[index]
-    return aggre_weights.cpu()
 
 
 if __name__ == "__main__":
@@ -128,7 +94,7 @@ if __name__ == "__main__":
             text_target = f"a photograph of ''."
 
             if config.use_blip:
-                with torch.no_grad():
+                with torch.inference_mode():
                     blip_inputs = blip_processor(
                         img, text_source[:-1], return_tensors="pt"
                     ).to(device)
