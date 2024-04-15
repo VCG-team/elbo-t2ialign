@@ -32,7 +32,8 @@ def denormalize(image):
 
 @torch.no_grad()
 def decode(latent: T, pipe: StableDiffusionPipeline, im_cat: TN = None):
-    image = pipe.vae.decode((1 / 0.18215) * latent, return_dict=False)[0]
+    scaling_factor = pipe.vae.config.scaling_factor
+    image = pipe.vae.decode((1 / scaling_factor) * latent, return_dict=False)[0]
     image = denormalize(image)
     if im_cat is not None:
         image = np.concatenate((im_cat, image), axis=1)
@@ -173,7 +174,7 @@ class DDSLoss:
                 z_source, eps, timestep
             )
             z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
-            # text_emb input shape: (2, 2, num_token, emb_dim), 1st dim is for source/target, 2nd dim is for uncond/cond
+            # text_emb shape after torch.cat: (2, 2, num_token, emb_dim), 1st dim is for source/target, 2nd dim is for uncond/cond
             eps_pred, _ = self.get_eps_prediction(
                 torch.cat((z_t_source, z_t_target)),
                 torch.cat((timestep, timestep)),
@@ -223,7 +224,6 @@ def image_optimization(
     text_target: str,
     num_iters=200,
     use_dds=True,
-    grad_list=None,
     device=torch.device("cpu"),
     times=[1, 25, 50, 75, 100, 125, 150],
 ) -> None:
@@ -266,9 +266,7 @@ def image_optimization(
             loss, log_loss = dds_loss.get_sds_loss(
                 z_target, embedding_target, guidance_scale=guidance_scale
             )
+
         optimizer.zero_grad()
         (2000 * loss).backward()
-        if grad_list is not None:
-            grad_list.append(z_target.grad.clone())
-
         optimizer.step()

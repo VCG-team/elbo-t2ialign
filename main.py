@@ -29,7 +29,7 @@ def same_seeds(seed):
     torch.backends.cudnn.deterministic = True  # 固定网络结构
 
 
-def get_weight_rato(weight_list):
+def get_weight_ratio(weight_list):
     sizes = []
     for weights in weight_list:
         sizes.append(np.sqrt(weights.shape[-2]))
@@ -44,7 +44,7 @@ def aggregate_self_att(controller):
     self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
 
     weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
-    weight = get_weight_rato(weight_list)
+    weight = get_weight_ratio(weight_list)
     aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
     for index, weights in enumerate(weight_list):
         size = int(np.sqrt(weights.shape[-1]))
@@ -66,15 +66,6 @@ def aggregate_self_att(controller):
         weights = weights.repeat_interleave(ratio, dim=1)
         aggre_weights += weights * weight[index]
     return aggre_weights.cpu()
-
-
-def get_mul_self_cross(cross_att, self_att):
-    res = cross_att.shape[0]
-    cross_att = cross_att.view(res * res, 1)
-    self_cross = torch.matmul(self_att, cross_att)
-    self_cross = self_cross.view(res, res)
-    cross_att = cross_att.view(res, res)
-    return self_cross
 
 
 if __name__ == "__main__":
@@ -115,13 +106,15 @@ if __name__ == "__main__":
             device
         )
 
+    # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
+    # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
     for k, (img, label) in tqdm(
         enumerate(dataset), total=len(dataset), desc="Processing images..."
     ):
 
         images = []
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
-        # for PLI Image, size is a tuple (width, height)
+        # For PIL Image, size is a tuple (width, height)
         w, h = img.size
         y = torch.where(label)[0]
         img_512 = np.array(img.resize((512, 512), resample=Image.BILINEAR))
@@ -158,8 +151,6 @@ if __name__ == "__main__":
                 tqdm.write(f"image: {k}, source_text: {text_source}")
                 tqdm.write(f"image: {k}, target_text: {text_target}")
 
-            grad_list_dds = None
-
             controller.reset()
             image_optimization(
                 pipeline,
@@ -168,7 +159,6 @@ if __name__ == "__main__":
                 text_target,
                 use_dds=True,
                 num_iters=10,
-                grad_list=grad_list_dds,
                 device=device,
                 times=config.times,
             )

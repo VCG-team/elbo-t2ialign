@@ -6,8 +6,6 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 
-LOW_RESOURCE = False
-
 
 class AttentionControl(abc.ABC):
 
@@ -17,22 +15,14 @@ class AttentionControl(abc.ABC):
     def between_steps(self):
         return
 
-    @property
-    def num_uncond_att_layers(self):
-        return self.num_att_layers if LOW_RESOURCE else 0
-
     @abc.abstractmethod
     def forward(self, attn, is_cross: bool, place_in_unet: str):
         raise NotImplementedError
 
     def __call__(self, attn, is_cross: bool, place_in_unet: str):
-        if self.cur_att_layer >= self.num_uncond_att_layers:
-            if LOW_RESOURCE:
-                attn = self.forward(attn, is_cross, place_in_unet)
-            else:
-                attn[16:32] = self.forward(attn[16:32], is_cross, place_in_unet)
+        attn[16:32] = self.forward(attn[16:32], is_cross, place_in_unet)
         self.cur_att_layer += 1
-        if self.cur_att_layer == self.num_att_layers + self.num_uncond_att_layers:
+        if self.cur_att_layer == self.num_att_layers:
             self.cur_att_layer = 0
             self.cur_step += 1
             self.between_steps()
