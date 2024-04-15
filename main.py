@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    config_path = "./configs/coco_main.yaml"
+    config_path = "./configs/voc12_main.yaml"
     config = OmegaConf.load(config_path)
 
     img_output_path = f"{config.output_path}/images"
