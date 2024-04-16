@@ -156,8 +156,8 @@ if __name__ == "__main__":
             ) * 255
 
         for i in range(0, y.shape[0]):
-            class_emb = config.category[y[i].item()]
+            cls_name = config.category[y[i].item()]
             cv2.imwrite(
-                f"{img_output_path}/{k}_{class_emb}.png",
+                f"{img_output_path}/{k}_{cls_name}.png",
                 images[i].permute(1, 2, 0).cpu().numpy(),
             )

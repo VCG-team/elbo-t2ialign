@@ -33,7 +33,7 @@ def denormalize(image):
 
 @torch.inference_mode()
 def decode(latent: T, pipe: StableDiffusionPipeline, im_cat: TN = None):
-    scaling_factor = pipe.vae.config.scaling_factor
+    scaling_factor = pipe.vae.scaling_factor
     image = pipe.vae.decode((1 / scaling_factor) * latent, return_dict=False)[0]
     image = denormalize(image)
     if im_cat is not None:
@@ -234,7 +234,7 @@ def image_optimization(
     with torch.no_grad():
         z_source = (
             pipeline.vae.encode(image_source)["latent_dist"].mean
-            * pipeline.vae.config.scaling_factor
+            * pipeline.vae.scaling_factor
         )
         image_target = image_source.clone()
         # shape: (1, num_token, emb_dim)
