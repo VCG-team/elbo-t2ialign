@@ -17,8 +17,8 @@ from datasets import COCOClsDataset, VOC12Dataset
 from utils.dds_utils import image_optimization
 from utils.ptp_utils import (
     AttentionStore,
+    aggregate_cross_att,
     aggregate_self_att,
-    generate_att_v2,
     register_attention_control,
 )
 
@@ -60,24 +60,20 @@ if __name__ == "__main__":
     else:
         sys.exit("Dataset not supported")
 
-    pipeline = StableDiffusionPipeline.from_pretrained(
-        config.diffusion_path, local_files_only=True
-    ).to(device)
+    pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path).to(device)
     controller = AttentionStore()
     register_attention_control(pipeline, controller)
 
     if config.use_blip:
         blip_processor = BlipProcessor.from_pretrained(config.blip_path)
-        blip_model = BlipForConditionalGeneration.from_pretrained(config.blip_path).to(
-            device
-        )
+        blip_model = BlipForConditionalGeneration.from_pretrained(config.blip_path)
+        blip_model.to(device)
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
     for k, (img, label) in tqdm(
         enumerate(dataset), total=len(dataset), desc="Processing images..."
     ):
-
         images = []
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
@@ -93,10 +89,8 @@ if __name__ == "__main__":
             cls_name = config.category[y[i].item()]
             text_source = f"a photograph of {cls_name}."
             text_target = f"a photograph of ''."
-            tokenizer = pipeline.tokenizer
-            tokens = tokenizer.encode(cls_name)
-            cls_len = len(tokens) - 2
-            pos = [4+i for i in range(cls_len)]
+            cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
+            pos = [4 + i for i in range(cls_name_len)]
 
             if config.use_blip:
                 with torch.inference_mode():
@@ -125,7 +119,7 @@ if __name__ == "__main__":
             controller.reset()
             image_optimization(pipeline, img_512, text_source, text_target, config)
 
-            cross_att_map = generate_att_v2(
+            cross_att = aggregate_cross_att(
                 [text_source],
                 controller,
                 pos,
@@ -135,14 +129,14 @@ if __name__ == "__main__":
             self_att = aggregate_self_att(controller).view(64 * 64, 64 * 64)
 
             for _ in range(config.self_times):
-                cross_att_map = torch.matmul(self_att, cross_att_map)
+                att_map = torch.matmul(self_att, cross_att)
 
             self_64 = (
                 torch.stack([att for att in controller.attention_store["up_self"][6:9]])
                 .mean(0)
                 .cpu()
             )
-            att_map = torch.matmul(self_64, cross_att_map).view(64, 64)
+            att_map = torch.matmul(self_64, att_map).view(64, 64)
 
             att_map = (att_map - att_map.min()) / (att_map.max() - att_map.min())
             att_map = F.sigmoid(8 * (att_map - 0.4))

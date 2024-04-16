@@ -18,22 +18,12 @@ num_cls = 0
 
 
 def writelog(filepath: str, log: Dict, comment: str) -> None:
-    """
-    将评估结果写入日志文件，并添加一些注释。
 
-    Args:
-        filepath: 日志文件路径。
-        log: 保存日志的字典。
-        comment: 注释。
-    """
     logfile = open(filepath, "a")
 
     logfile.write(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-
     logfile.write("\t%s\n\n" % comment)
-
     logfile.write(json.dumps(log, indent=4))
-
     logfile.write("\n\n=====================================\n\n")
 
     logfile.close()

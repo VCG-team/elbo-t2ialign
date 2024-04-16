@@ -167,23 +167,6 @@ def register_attention_control(model, controller):
     controller.num_att_layers = cross_att_count
 
 
-def aggregate_attention(
-    attention_store: AttentionStore, res: int, from_where: List[str], is_cross: bool
-):
-
-    out = []
-    attention_maps = attention_store.get_average_attention()
-    num_pixels = res**2
-    for location in from_where:
-        for item in attention_maps[f"{location}_{'cross' if is_cross else 'self'}"]:
-            if item.shape[0] == num_pixels:
-                cross_maps = item.reshape(res, res, item.shape[-1])
-                out.append(cross_maps)
-    out = torch.stack(out, dim=0)
-    out = out.sum(0) / out.shape[0]
-    return out.cpu()
-
-
 def aggregate_all_attention(
     prompts,
     attention_store: AttentionStore,
@@ -250,70 +233,21 @@ def aggregate_self_att(controller: AttentionStore):
     return aggre_weights.cpu()
 
 
-def generate_att(
-    prompts,
-    controller: AttentionStore,
-    pos,
-    is_self=True,
-    is_multi_self=False,
-    is_cross_norm=True,
-    weight=[0.3, 0.5, 0.1, 0.1],
-):
-    layers = ("mid", "up", "down")
-    cross_attention_maps = aggregate_all_attention(prompts, controller, layers, True, 0)
-    self_attention_maps = aggregate_all_attention(prompts, controller, layers, False, 0)
-
-    imgs = []
-    for idx, res in enumerate([8, 16, 32, 64]):
-        out_att = cross_attention_maps[idx].permute(2, 0, 1).float()
-        if is_cross_norm:
-            att_max = torch.amax(out_att, dim=(1, 2), keepdim=True)
-            att_min = torch.amin(out_att, dim=(1, 2), keepdim=True)
-            out_att = (out_att - att_min) / (att_max - att_min)
-        if is_multi_self:
-            self_att = self_attention_maps[idx].view(res * res, res * res).float()
-            self_att = self_att / self_att.max()
-            out_att = torch.matmul(
-                self_att.unsqueeze(0), out_att.view(-1, res * res, 1)
-            ).view(-1, res, res)
-        if res != 64:
-            out_att = F.interpolate(
-                out_att.unsqueeze(0),
-                size=(64, 64),
-                mode="bilinear",
-                align_corners=False,
-            ).squeeze()
-
-        imgs.append(out_att * weight[idx])
-
-    cross_att_map = torch.stack(imgs).sum(0)[pos].mean(0).view(64 * 64, 1)
-
-    if is_self and not is_multi_self:
-        self_att = self_attention_maps[3].view(64 * 64, 64 * 64).float()
-        self_att = self_att / self_att.max()
-        for _ in range(1):
-            cross_att_map = torch.matmul(self_att, cross_att_map)
-
-    att_map = cross_att_map.view(res, res)
-    return att_map
-
-
-def generate_att_v2(
+def aggregate_cross_att(
     prompts,
     controller: AttentionStore,
     pos,
     weight=[0.3, 0.5, 0.1, 0.1],
     cross_threshold=0.4,
 ):
+    cross_att_map = []
     layers = ["down", "mid", "up"]
     cross_attention_maps = aggregate_all_attention(prompts, controller, layers, True, 0)
-    # self_attention_maps = aggregate_all_attention(prompts,controller, layers, False, 0)
-    out_atts = []
     for idx, res in enumerate([8, 16, 32, 64]):
         next_word = prompts[0].split(" ")[4]
         if next_word.endswith("ing"):
             cross_att = (
-                cross_attention_maps[idx][:, :, pos+[pos[-1] + 1]]
+                cross_attention_maps[idx][:, :, pos + [pos[-1] + 1]]
                 .mean(2)
                 .view(res, res)
                 .float()
@@ -334,9 +268,9 @@ def generate_att_v2(
                 .squeeze()
             )
         cross_att = cross_att / cross_att.max()
-        out_atts.append(cross_att * weight[idx])
+        cross_att_map.append(cross_att * weight[idx])
 
-    cross_att_map = torch.stack(out_atts).sum(0).view(64 * 64, 1)
+    cross_att_map = torch.stack(cross_att_map).sum(0).view(64 * 64, 1)
     cross_att_map = F.sigmoid(8 * (cross_att_map - cross_threshold))
     cross_att_map = (cross_att_map - cross_att_map.min()) / (
         cross_att_map.max() - cross_att_map.min()
