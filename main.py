@@ -90,8 +90,13 @@ if __name__ == "__main__":
             continue
 
         for i in range(y.shape[0]):
-            text_source = f"a photograph of {config.category[y[i].item()]}."
+            cls_name = config.category[y[i].item()]
+            text_source = f"a photograph of {cls_name}."
             text_target = f"a photograph of ''."
+            tokenizer = pipeline.tokenizer
+            tokens = tokenizer.encode(cls_name)
+            cls_len = len(tokens) - 2
+            pos = [4+i for i in range(cls_len)]
 
             if config.use_blip:
                 with torch.inference_mode():
@@ -123,7 +128,7 @@ if __name__ == "__main__":
             cross_att_map = generate_att_v2(
                 [text_source],
                 controller,
-                4,
+                pos,
                 weight=[0.3, 0.5, 0.1, 0.1],
                 cross_threshold=config.cross_threshold,
             )
