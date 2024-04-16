@@ -124,7 +124,6 @@ bg_category:
     "sea",
     "railway",
     "railroad",
-    "keyboard",
     "helmet",
     "cloud",
     "house",
@@ -135,5 +134,4 @@ bg_category:
     "street",
     "valley",
     "bridge",
-    "sign",
   ]
