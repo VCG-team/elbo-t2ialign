@@ -217,27 +217,15 @@ def aggregate_cross_att(
     for idx, res in enumerate([8, 16, 32, 64]):
         next_word = prompts[0].split(" ")[4]
         if next_word.endswith("ing"):
-            cross_att = (
-                cross_attention_maps[idx][:, :, pos + [pos[-1] + 1]]
-                .mean(2)
-                .view(res, res)
-                .float()
-            )
+            cross_att = cross_attention_maps[idx][:, :, pos + [pos[-1] + 1]]
+            cross_att = cross_att.mean(2).view(res, res).float()
         else:
-            cross_att = (
-                cross_attention_maps[idx][:, :, pos].mean(2).view(res, res).float()
-            )
+            cross_att = cross_attention_maps[idx][:, :, pos]
+            cross_att = cross_att.mean(2).view(res, res).float()
         if res != 64:
-            cross_att = (
-                F.interpolate(
-                    cross_att.unsqueeze(0).unsqueeze(0),
-                    size=(64, 64),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-                .squeeze()
-                .squeeze()
-            )
+            cross_att = cross_att.unsqueeze(0).unsqueeze(0)
+            cross_att = F.interpolate(cross_att, size=(64, 64), mode="bilinear")
+            cross_att = cross_att.squeeze()
         cross_att = cross_att / cross_att.max()
         cross_att_map.append(cross_att * weight[idx])
 
@@ -263,17 +251,9 @@ def aggregate_self_att(controller: AttentionStore):
     for index, weights in enumerate(weight_list):
         size = int(np.sqrt(weights.shape[-1]))
         ratio = int(64 / size)
-        weights = weights.reshape(-1, size, size)
-        weights = (
-            F.interpolate(
-                weights.unsqueeze(0),
-                size=(64, 64),
-                mode="bilinear",
-                align_corners=False,
-            )
-            .squeeze()
-            .squeeze()
-        )
+        weights = weights.reshape(-1, size, size).unsqueeze(0)
+        weights = F.interpolate(weights, size=(64, 64), mode="bilinear")
+        weights = weights.squeeze()
         weights = weights.reshape(size, size, 64, 64)
         weights = weights / torch.sum(weights, dim=(2, 3), keepdim=True)
         weights = weights.repeat_interleave(ratio, dim=0)

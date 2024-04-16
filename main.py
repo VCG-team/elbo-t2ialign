@@ -81,10 +81,7 @@ if __name__ == "__main__":
         y = torch.where(label)[0]
         img_512 = np.array(img.resize((512, 512), resample=Image.BILINEAR))
 
-        # if no label, skip the image
-        if y.shape[0] == 0:
-            continue
-
+        # generate mask for each label in the image
         for i in range(y.shape[0]):
             # 1. prompts generation
             cls_name = config.category[y[i].item()]
