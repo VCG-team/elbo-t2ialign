@@ -310,10 +310,11 @@ def generate_att_v2(
     # self_attention_maps = aggregate_all_attention(prompts,controller, layers, False, 0)
     out_atts = []
     for idx, res in enumerate([8, 16, 32, 64]):
-        next_word = prompts[0].split(" ")[pos]
+        import ipdb;ipdb.set_trace()
+        next_word = prompts[0].split(" ")[4]
         if next_word.endswith("ing"):
             cross_att = (
-                cross_attention_maps[idx][:, :, [pos, pos + 1]]
+                cross_attention_maps[idx][:, :, [pos+[pos[-1] + 1]]]
                 .mean(2)
                 .view(res, res)
                 .float()
