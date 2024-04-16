@@ -21,7 +21,7 @@ class AttentionControl(abc.ABC):
         raise NotImplementedError
 
     def __call__(self, attn, is_cross: bool, place_in_unet: str):
-        attn[16:32] = self.forward(attn[16:32], is_cross, place_in_unet)
+        attn = self.forward(attn, is_cross, place_in_unet)
         self.cur_att_layer += 1
         if self.cur_att_layer == self.num_att_layers:
             self.cur_att_layer = 0
@@ -55,7 +55,7 @@ class AttentionStore(AttentionControl):
     def forward(self, attn, is_cross: bool, place_in_unet: str):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
         if attn.shape[1] <= 64**2:  # avoid memory overhead
-            self.step_store[key].append(attn[:8].mean(0))
+            self.step_store[key].append(attn[16:24].mean(0))
         return attn
 
     def between_steps(self):

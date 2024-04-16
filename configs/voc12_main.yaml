@@ -4,7 +4,7 @@ dataset: "voc12"
 # input/output/model paths
 data_root: "./VOCdevkit/VOC2012"
 data_name_list: "./data/voc12_train_id.txt"
-output_path: "./output/voc12"
+output_path: "./output/test"
 diffusion_path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
 blip_path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
 

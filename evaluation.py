@@ -9,33 +9,12 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
-CATEGORY = [
-    "background",
-    "plane",
-    "bicycle",
-    "bird",
-    "boat",
-    "bottle",
-    "buses",
-    "car",
-    "cat",
-    "chair",
-    "cow",
-    "table",
-    "dog",
-    "horse",
-    "motorbike",
-    "people",
-    "plant",
-    "sheep",
-    "sofa",
-    "train",
-    "monitor",
-]
-NUM_CLS = len(CATEGORY)
+category = []
+num_cls = 0
 
 
 def writelog(filepath: str, log: Dict, comment: str) -> None:
@@ -85,7 +64,7 @@ def load_predict_and_gt(
         gt_file = os.path.join(gt_folder, "%s.png" % name)
         gt = np.array(Image.open(gt_file))
         h, w = gt.shape
-        predict = np.zeros((NUM_CLS, h, w), np.float32)
+        predict = np.zeros((num_cls, h, w), np.float32)
 
         # 获取该图像预测出的每个类别的预测结果
         for cls in idx_to_cls[idx]:
@@ -99,7 +78,7 @@ def load_predict_and_gt(
                 mode="bilinear",
                 align_corners=False,
             )[0][0].numpy()
-            cls_idx = CATEGORY.index(cls)
+            cls_idx = category.index(cls)
             predict[cls_idx] = predict_cls
 
         # 将不同类别的预测结果合并，得到最终的预测结果
@@ -127,7 +106,7 @@ def apply_threshold(
         predict_copy[background] = 0
 
         # 将图像级别的预测结果重新整理成实例级别的预测结果
-        for cls_idx in range(NUM_CLS):
+        for cls_idx in range(num_cls):
 
             p_i = (predict_copy == cls_idx) * cal
             t_i = gt == cls_idx
@@ -178,10 +157,10 @@ def apply_metrics(
         end = min((b_idx + 1) * bucket_size, len(instance_statistics))
 
         # 统计每个bucket下每个类的predict区域(P)、ground truth区域(T)、T和P的交集区域(TP)、实例数量(cls_cnt)
-        P = np.zeros(NUM_CLS, dtype=np.int64)
-        T = np.zeros(NUM_CLS, dtype=np.int64)
-        TP = np.zeros(NUM_CLS, dtype=np.int64)
-        cls_cnt = np.zeros(NUM_CLS, dtype=np.int32)
+        P = np.zeros(num_cls, dtype=np.int64)
+        T = np.zeros(num_cls, dtype=np.int64)
+        TP = np.zeros(num_cls, dtype=np.int64)
+        cls_cnt = np.zeros(num_cls, dtype=np.int32)
 
         for (
             sum_p_i,
@@ -223,49 +202,34 @@ def apply_metrics(
     return metrics
 
 
-class Args:
-    """
-    用于模拟命令行输入的参数，相当于整个评估程序的输入。
-
-    Attributes:
-        comment: 本次评估的注释，该注释会记录到日志文件中。
-        start: 评估的起始阈值。
-        end: 评估的结束阈值。
-        gt_dir: Ground Truth的数据目录。
-        gt_list: 给出Ground Truth文件名列表的文件的路径。
-        base_dir: 进行评估的根目录（存放预测结果、日志文件等）。
-        predict_dir: 预测结果的目录。
-        logfile: 日志文件的路径。
-        bucket_num: 数据分块的数量，日志文件会保存每个块的评估结果。
-    """
-
-    def __init__(self):
-        self.comment = "train1464"
-        self.start = 50
-        self.end = 70
-        self.gt_dir = "./VOCdevkit/VOC2012/SegmentationClassAug"
-        self.gt_list = "./data/voc12_train_id.txt"
-        self.base_dir = "./output/voc12"
-        self.predict_dir = os.path.join(self.base_dir, "images")
-        self.logfile = os.path.join(self.base_dir, "eval.txt")
-        self.bucket_num = 10
-
-
 if __name__ == "__main__":
-    args = Args()
 
-    if args.start >= args.end:
-        print("start should be less than end.")
-        sys.exit(1)
+    config_path = "./configs/voc12_evaluation.yaml"
+    config: DictConfig = OmegaConf.load(config_path)
 
-    image_statistics = load_predict_and_gt(args.predict_dir, args.gt_dir, args.gt_list)
+    if config.start >= config.end:
+        sys.exit("Start threshold should be less than end")
+
+    if config.dataset == "voc12":
+        gt_dir = os.path.join(config.data_root, "SegmentationClassAug")
+    elif config.dataset == "coco":
+        gt_dir = os.path.join(config.data_root, "mask/train2014")
+    else:
+        sys.exit("Dataset not supported")
+
+    predict_dir = os.path.join(config.output_path, "images")
+    log_path = os.path.join(config.output_path, "eval.txt")
+    category = config.category
+    num_cls = len(category)
+
+    image_statistics = load_predict_and_gt(predict_dir, gt_dir, config.data_name_list)
 
     best_threshold = 0
     best_metrics = None
     best_instance_statistics = None
 
     threshold_bar = tqdm(
-        range(args.start, args.end), initial=args.start, total=args.end
+        range(config.start, config.end), initial=config.start, total=config.end
     )
     threshold_bar.set_description("applying threshold...")
     for i in threshold_bar:
@@ -286,7 +250,7 @@ if __name__ == "__main__":
         )
 
     print(
-        f"threshold range: {args.start/100}-{args.end/100}, best threshold: {best_threshold:.3f}, best mIoU: {best_metrics['m_IoU'][0]:.3f}"
+        f"threshold range: {config.start/100}-{config.end/100}, best threshold: {best_threshold:.3f}, best mIoU: {best_metrics['m_IoU'][0]:.3f}"
     )
 
     print("logging...", end="")
@@ -305,7 +269,7 @@ if __name__ == "__main__":
         best_instance_statistics,
         filter_fn=lambda x: x[5] != 0,
         sort_fn=lambda x: x[1] / (x[3] * x[4]),
-        bucket_num=args.bucket_num,
+        bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t_area)": metrics})
 
@@ -314,9 +278,9 @@ if __name__ == "__main__":
         best_instance_statistics,
         filter_fn=lambda x: x[5] != 0,
         sort_fn=lambda x: int(x[1]),
-        bucket_num=args.bucket_num,
+        bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t)": metrics})
 
-    writelog(args.logfile, log, args.comment)
+    writelog(log_path, log, config.comment)
     print("done")
