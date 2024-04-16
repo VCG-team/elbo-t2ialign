@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from compel import Compel
 from diffusers import StableDiffusionPipeline, UNet2DConditionModel
+from omegaconf import DictConfig
 from PIL import Image
 from torch.optim.sgd import SGD
 
@@ -222,12 +223,12 @@ def image_optimization(
     image: np.ndarray,
     text_source: str,
     text_target: str,
-    num_iters=200,
-    use_dds=True,
-    device=torch.device("cpu"),
-    times=[1, 25, 50, 75, 100, 125, 150],
+    config: DictConfig,
 ) -> None:
+    device = torch.device(config.device)
     dds_loss = DDSLoss(device, pipeline)
+    dds_loss.alpha_exp = config.alpha_exp
+    dds_loss.sigma_exp = config.sigma_exp
     image_source = torch.from_numpy(image).float().permute(2, 0, 1) / 127.5 - 1
     image_source = image_source.unsqueeze(0).to(device)
     with torch.no_grad():
@@ -246,27 +247,28 @@ def image_optimization(
         embedding_source = torch.stack([embedding_null, embedding_text], dim=1)
         embedding_target = torch.stack([embedding_null, embedding_text_target], dim=1)
 
-    guidance_scale = 7.5
+    guidance_scale = config.guidance_scale
     image_target.requires_grad = True
 
     z_target = z_source.clone()
     z_target.requires_grad = True
-    optimizer = SGD(params=[z_target], lr=1e-1)
+    optimizer = SGD(params=[z_target], lr=config.lr)
 
-    for i in range(num_iters):
-        if use_dds:
+    for t in config.timesteps:
+        if config.use_dds:
             loss, log_loss = dds_loss.get_dds_loss(
                 z_source,
                 z_target,
                 embedding_source,
                 embedding_target,
+                timestep=t,
                 guidance_scale=guidance_scale,
             )
         else:
             loss, log_loss = dds_loss.get_sds_loss(
-                z_target, embedding_target, guidance_scale=guidance_scale
+                z_target, embedding_target, timestep=t, guidance_scale=guidance_scale
             )
 
         optimizer.zero_grad()
-        (2000 * loss).backward()
+        (config.loss_factor * loss).backward()
         optimizer.step()

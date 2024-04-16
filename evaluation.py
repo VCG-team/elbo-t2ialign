@@ -245,7 +245,7 @@ class Args:
         self.end = 70
         self.gt_dir = "./VOCdevkit/VOC2012/SegmentationClassAug"
         self.gt_list = "./data/voc12_train_id.txt"
-        self.base_dir = "./output/test"
+        self.base_dir = "./output/voc12"
         self.predict_dir = os.path.join(self.base_dir, "images")
         self.logfile = os.path.join(self.base_dir, "eval.txt")
         self.bucket_num = 10

@@ -218,7 +218,7 @@ def aggregate_all_attention(
     return atts
 
 
-def aggregate_self_att(controller):
+def aggregate_self_att(controller: AttentionStore):
     self_att_8 = [att for att in controller.attention_store["mid_self"]]
     self_att_16 = [att for att in controller.attention_store["up_self"][0:3]]
     self_att_32 = [att for att in controller.attention_store["up_self"][3:6]]
@@ -252,7 +252,7 @@ def aggregate_self_att(controller):
 
 def generate_att(
     prompts,
-    controller,
+    controller: AttentionStore,
     pos,
     is_self=True,
     is_multi_self=False,
@@ -299,7 +299,11 @@ def generate_att(
 
 
 def generate_att_v2(
-    prompts, controller, pos, weight=[0.3, 0.5, 0.1, 0.1], cross_threshold=0.4
+    prompts,
+    controller: AttentionStore,
+    pos,
+    weight=[0.3, 0.5, 0.1, 0.1],
+    cross_threshold=0.4,
 ):
     layers = ["down", "mid", "up"]
     cross_attention_maps = aggregate_all_attention(prompts, controller, layers, True, 0)

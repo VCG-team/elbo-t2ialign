@@ -118,16 +118,7 @@ if __name__ == "__main__":
                 tqdm.write(f"image: {k}, target_text: {text_target}")
 
             controller.reset()
-            image_optimization(
-                pipeline,
-                img_512,
-                text_source,
-                text_target,
-                use_dds=True,
-                num_iters=10,
-                device=device,
-                times=config.times,
-            )
+            image_optimization(pipeline, img_512, text_source, text_target, config)
 
             cross_att_map = generate_att_v2(
                 [text_source],

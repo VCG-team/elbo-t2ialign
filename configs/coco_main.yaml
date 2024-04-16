@@ -15,7 +15,15 @@ use_blip: True
 print_prompt: False # 是否打印prompt
 self_times: 1 # 乘以self_aggre的次数
 cross_threshold: 0.4 # cross的二极分化阈值
-times: [1, 25, 50, 75, 100, 125, 150]
+
+# dds loss settings
+use_dds: True
+timesteps: [1, 25, 50, 75, 100, 125, 150]
+guidance_scale: 7.5
+lr: 1.0e-1
+loss_factor: 2000.0
+alpha_exp: 0.0
+sigma_exp: 0.0
 
 # dataset metainfo
 category:
