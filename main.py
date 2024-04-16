@@ -18,6 +18,7 @@ from utils.dds_utils import image_optimization
 from utils.ptp_utils import (
     AttentionStore,
     aggregate_cross_att,
+    aggregate_self_64,
     aggregate_self_att,
     register_attention_control,
 )
@@ -74,7 +75,6 @@ if __name__ == "__main__":
     for k, (img, label) in tqdm(
         enumerate(dataset), total=len(dataset), desc="Processing images..."
     ):
-        images = []
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
@@ -86,6 +86,7 @@ if __name__ == "__main__":
             continue
 
         for i in range(y.shape[0]):
+            # 1. prompts generation
             cls_name = config.category[y[i].item()]
             text_source = f"a photograph of {cls_name}."
             text_target = f"a photograph of ''."
@@ -101,12 +102,10 @@ if __name__ == "__main__":
                     blip_out_prompt = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
                     )
-                    length = len(text_source[:-1])
-
                     text_source = (
                         text_source[:-1]
                         + "++"
-                        + blip_out_prompt[length:]
+                        + blip_out_prompt[len(text_source) - 1 :]
                         + " and "
                         + ",".join(config.bg_category)
                         + "."
@@ -116,47 +115,36 @@ if __name__ == "__main__":
                 tqdm.write(f"image: {k}, source_text: {text_source}")
                 tqdm.write(f"image: {k}, target_text: {text_target}")
 
+            # 2. dds loss optimization
             controller.reset()
             image_optimization(pipeline, img_512, text_source, text_target, config)
 
-            cross_att = aggregate_cross_att(
+            # 3. refine attention map
+            att_map = aggregate_cross_att(
                 [text_source],
                 controller,
                 pos,
                 weight=[0.3, 0.5, 0.1, 0.1],
-                cross_threshold=config.cross_threshold,
+                cross_threshold=config.norm_bias,
             )
-            self_att = aggregate_self_att(controller).view(64 * 64, 64 * 64)
 
+            self_att = aggregate_self_att(controller)
             for _ in range(config.self_times):
-                att_map = torch.matmul(self_att, cross_att)
+                att_map = torch.matmul(self_att, att_map)
 
-            self_64 = (
-                torch.stack([att for att in controller.attention_store["up_self"][6:9]])
-                .mean(0)
-                .cpu()
-            )
-            att_map = torch.matmul(self_64, att_map).view(64, 64)
+            self_64 = aggregate_self_64(controller)
+            for _ in range(config.self_64_times):
+                att_map = torch.matmul(self_64, att_map)
 
+            # 4. normalize attention map
+            att_map = att_map.view(64, 64)
             att_map = (att_map - att_map.min()) / (att_map.max() - att_map.min())
-            att_map = F.sigmoid(8 * (att_map - 0.4))
+            att_map = F.sigmoid(config.norm_factor * (att_map - config.norm_bias))
             att_map = (att_map - att_map.min()) / (att_map.max() - att_map.min())
 
-            images.append((att_map).unsqueeze(0).repeat(3, 1, 1))
-
-        images = torch.stack(images)
-        images = F.interpolate(
-            images, size=(h, w), mode="bilinear", align_corners=False
-        )
-
-        for i in range(images.shape[0]):
-            images[i] = (
-                (images[i] - images[i].min()) / (images[i].max() - images[i].min())
-            ) * 255
-
-        for i in range(0, y.shape[0]):
-            cls_name = config.category[y[i].item()]
-            cv2.imwrite(
-                f"{img_output_path}/{k}_{cls_name}.png",
-                images[i].permute(1, 2, 0).cpu().numpy(),
-            )
+            # 5. save attention map as mask
+            mask = att_map.unsqueeze(0).unsqueeze(0)
+            mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
+            mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
+            mask = mask.squeeze(0).repeat(3, 1, 1).permute(1, 2, 0).cpu().numpy()
+            cv2.imwrite(f"{img_output_path}/{k}_{cls_name}.png", mask)

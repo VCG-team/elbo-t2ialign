@@ -8,15 +8,19 @@ output_path: "./output/coco"
 diffusion_path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
 blip_path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
 
-# model settings
-device: 1
+# main process settings (main.py)
+device: 4
 seed: 4307
 use_blip: True
 print_prompt: False # 是否打印prompt
-self_times: 1 # 乘以self_aggre的次数
-cross_threshold: 0.4 # cross的二极分化阈值
+self_times: 1 # 乘以self_att的次数
+self_64_times: 1 # 乘以self_64的次数
+norm_bias: 0.4 # 标准化attention使用的bias
+norm_factor: 8 # 标准化attention使用的factor
 
-# dds loss settings
+# ptp attention settings (ptp_utils.py)
+
+# dds loss settings (dds_utils.py)
 use_dds: True
 timesteps: [1, 25, 50, 75, 100, 125, 150]
 guidance_scale: 7.5

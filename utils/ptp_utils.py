@@ -54,8 +54,11 @@ class AttentionStore(AttentionControl):
 
     def forward(self, attn, is_cross: bool, place_in_unet: str):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
-        if attn.shape[1] <= 64**2:  # avoid memory overhead
-            self.step_store[key].append(attn[16:24].mean(0))
+        # for stable diffusion v1.5, attention heads = 8
+        # and in dds loss, attn uses batched input
+        # so [0:8] is null text and source img, [8:16] is null text and target img
+        # [16:24] is source text and source img, [24:32] is target text and target img
+        self.step_store[key].append(attn[16:24].mean(0))
         return attn
 
     def between_steps(self):
@@ -201,38 +204,6 @@ def aggregate_all_attention(
     return atts
 
 
-def aggregate_self_att(controller: AttentionStore):
-    self_att_8 = [att for att in controller.attention_store["mid_self"]]
-    self_att_16 = [att for att in controller.attention_store["up_self"][0:3]]
-    self_att_32 = [att for att in controller.attention_store["up_self"][3:6]]
-    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
-
-    weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
-    weight = [np.sqrt(weights.shape[-2]) for weights in weight_list]
-    weight = weight / np.sum(weight)
-    aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
-    for index, weights in enumerate(weight_list):
-        size = int(np.sqrt(weights.shape[-1]))
-        ratio = int(64 / size)
-        weights = weights.reshape(-1, size, size)
-        weights = (
-            F.interpolate(
-                weights.unsqueeze(0),
-                size=(64, 64),
-                mode="bilinear",
-                align_corners=False,
-            )
-            .squeeze()
-            .squeeze()
-        )
-        weights = weights.reshape(size, size, 64, 64)
-        weights = weights / torch.sum(weights, dim=(2, 3), keepdim=True)
-        weights = weights.repeat_interleave(ratio, dim=0)
-        weights = weights.repeat_interleave(ratio, dim=1)
-        aggre_weights += weights * weight[index]
-    return aggre_weights.cpu()
-
-
 def aggregate_cross_att(
     prompts,
     controller: AttentionStore,
@@ -277,3 +248,43 @@ def aggregate_cross_att(
     )
 
     return cross_att_map
+
+
+def aggregate_self_att(controller: AttentionStore):
+    self_att_8 = [att for att in controller.attention_store["mid_self"]]
+    self_att_16 = [att for att in controller.attention_store["up_self"][0:3]]
+    self_att_32 = [att for att in controller.attention_store["up_self"][3:6]]
+    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
+
+    weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
+    weight = [np.sqrt(weights.shape[-2]) for weights in weight_list]
+    weight = weight / np.sum(weight)
+    aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
+    for index, weights in enumerate(weight_list):
+        size = int(np.sqrt(weights.shape[-1]))
+        ratio = int(64 / size)
+        weights = weights.reshape(-1, size, size)
+        weights = (
+            F.interpolate(
+                weights.unsqueeze(0),
+                size=(64, 64),
+                mode="bilinear",
+                align_corners=False,
+            )
+            .squeeze()
+            .squeeze()
+        )
+        weights = weights.reshape(size, size, 64, 64)
+        weights = weights / torch.sum(weights, dim=(2, 3), keepdim=True)
+        weights = weights.repeat_interleave(ratio, dim=0)
+        weights = weights.repeat_interleave(ratio, dim=1)
+        aggre_weights += weights * weight[index]
+    return aggre_weights.view(64 * 64, 64 * 64).cpu()
+
+
+def aggregate_self_64(controller: AttentionStore):
+    return (
+        torch.stack([att for att in controller.attention_store["up_self"][6:9]])
+        .mean(0)
+        .cpu()
+    )
