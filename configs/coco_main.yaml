@@ -19,8 +19,13 @@ norm_bias: 0.4 # 标准化attention使用的bias
 norm_factor: 8 # 标准化attention使用的factor
 
 # ptp attention settings (ptp_utils.py)
+# For stable diffusion v1.5 series, cross/self attns are both 16 layers in unet.
+# As img pass down->mid->up unet block, img resolution will pass 64*2->32*2->16*2->8->16*3->32*3->64*3.
+# Only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109).
+# So we can choose some layers to achieve better performance.
 target_factor: 0.5 # source img latent需要融合target img latent的比例
-cross_weight: [0.3, 0.5, 0.1, 0.1] # [8, 16, 32, 64]解析度cross attention的权重
+valid_cross_layer: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # 需要选择的cross attention层
+cross_weight: [1, 1, 1, 1, 5, 5, 15, 5, 5, 5, 1, 1, 1, 1, 1, 1] # 每一层cross attention的权重，列表长度需要和valid_cross_attn一致
 
 # dds loss settings (dds_utils.py)
 use_dds: True

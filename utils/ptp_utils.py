@@ -1,10 +1,11 @@
 # Modified from Prompt-to-Prompt(ICLR 2023) https://github.com/google/prompt-to-prompt
 import abc
-from math import log2, sqrt
+from math import sqrt
 from typing import List
 
 import torch
 import torch.nn.functional as F
+from diffusers import StableDiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
 
@@ -55,11 +56,7 @@ class AttentionStore(AttentionControl):
 
     def forward(self, attn, is_cross: bool, place_in_unet: str):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
-        # for stable diffusion v1.5 series, attention heads = 8
-        # and in dds loss, attn uses batched input
-        # so [0:8] is null text and source img, [8:16] is null text and target img
-        # [16:24] is source text and source img, [24:32] is target text and target img
-        self.step_store[key].append(attn[16:24].mean(0))
+        self.step_store[key].append(attn)
         return attn
 
     def between_steps(self):
@@ -89,7 +86,11 @@ class AttentionStore(AttentionControl):
         self.attention_store = {}
 
 
-def register_attention_control(model, controller, config):
+def register_attention_control(
+    pipeline: StableDiffusionPipeline,
+    controller: AttentionStore,
+    config: DictConfig,
+):
     def ca_forward(self, place_in_unet):
         to_out = self.to_out
         if type(to_out) is torch.nn.modules.container.ModuleList:
@@ -97,18 +98,14 @@ def register_attention_control(model, controller, config):
         else:
             to_out = self.to_out
 
-        def forward(
-            hidden_states,
-            encoder_hidden_states=None,
-            attention_mask=None,
-            **cross_attention_kwargs,
-        ):
+        def forward(hidden_states, encoder_hidden_states=None, attention_mask=None):
+            # keep variable name with original code(prompt-to-prompt)
             x = hidden_states
             context = encoder_hidden_states
             mask = attention_mask
+
             batch_size = len(x)
             h = self.heads
-
             is_cross = context is not None
             context = context if is_cross else x
             q = self.to_q(x)
@@ -128,20 +125,23 @@ def register_attention_control(model, controller, config):
             # attention, what we cannot get enough of
             attn = sim.softmax(dim=-1)
 
+            # for stable diffusion v1.5 series, attention heads = 8
+            # and in dds loss, attn uses batched input(batch size = 4)
+            # so x[0] is null text and source img, x[1] is null text and target img
+            # x[2] is source text and source img, x[3] is target text and target img
             if is_cross:
-                x[2] = x[2] + config.target_factor * (x[3] - x[2])
-                q = self.to_q(x)
-                k = self.to_k(context)
-                v = self.to_v(context)
-                q, k, v = map(
-                    lambda t: rearrange(t, "b n (h d) -> (b h) n d", h=h), (q, k, v)
-                )
-                sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
-                attn_c = sim.softmax(dim=-1)
-
-                attn_c = controller(attn_c, is_cross, place_in_unet)
+                source_x = x[2] + config.target_factor * (x[3] - x[2])
+                source_q = self.to_q(source_x.unsqueeze(0))
+                source_q = rearrange(source_q, "b n (h d) -> (b h) n d", h=h)
+                source_k = k[16:24]
+                sim = torch.einsum("b i d, b j d -> b i j", source_q, source_k)
+                source_att = (sim * self.scale).softmax(dim=-1)
+                # save cross attention between source text and source img(take mean for 8 attention heads)
+                controller(source_att.mean(0), is_cross, place_in_unet)
             else:
-                attn = controller(attn, is_cross, place_in_unet)
+                source_att = attn[16:24]
+                # save self attention of source img(take mean for 8 attention heads)
+                controller(source_att.mean(0), is_cross, place_in_unet)
 
             out = torch.einsum("b i j, b j d -> b i d", attn, v)
             out = rearrange(out, "(b h) n d -> b n (h d)", h=h)
@@ -159,7 +159,7 @@ def register_attention_control(model, controller, config):
         return count
 
     cross_att_count = 0
-    sub_nets = model.unet.named_children()
+    sub_nets = pipeline.unet.named_children()
     for net in sub_nets:
         if "down" in net[0]:
             cross_att_count += register_recr(net[1], 0, "down")
@@ -179,15 +179,19 @@ def aggregate_cross_att(
 ):
     # 1. get all att maps
     att_maps = controller.get_average_attention()
+
     # 2. extract cross att maps
-    cross_atts = [[], [], [], []]  # respect for res [8, 16, 32, 64]
+    cross_layer_cnt = -1
+    cross_atts = []
     for location in ["down", "mid", "up"]:
         for item in att_maps[f"{location}_cross"]:  # item shape: (res*res, prompt len)
+            cross_layer_cnt += 1
+            if cross_layer_cnt not in config.valid_cross_layer:
+                continue
             res = round(sqrt(item.shape[0]))
-            res_idx = round(log2(res)) - 3
             cross_maps = item.reshape(res, res, item.shape[-1])
-            cross_atts[res_idx].append(cross_maps)
-    cross_atts = [torch.stack(att).mean(0) for att in cross_atts]
+            cross_atts.append(cross_maps)
+
     # 3. get cross att maps for specific words
     next_word = prompt.split(" ")[4]
     if next_word.endswith("ing"):
@@ -195,13 +199,16 @@ def aggregate_cross_att(
     else:
         cross_atts = [att[:, :, pos] for att in cross_atts]
     cross_atts = [att.mean(2) for att in cross_atts]
+
     # 4. interpolate these cross att maps to 64x64, and then apply weight
     cross_atts_64 = []
+    cross_weight_sum = sum(config.cross_weight)
     for idx, att in enumerate(cross_atts):
         att = att.unsqueeze(0).unsqueeze(0)
         att = F.interpolate(att, size=(64, 64), mode="bilinear")
         att = att.squeeze() / att.max()
-        cross_atts_64.append(att * config.cross_weight[idx])
+        cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
+
     # 5. sum up and normalize these cross att maps
     cross_atts_64 = torch.stack(cross_atts_64).sum(0).view(64 * 64, 1)
     cross_atts_64 = F.sigmoid(config.norm_factor * (cross_atts_64 - config.norm_bias))
