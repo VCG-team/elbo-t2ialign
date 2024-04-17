@@ -231,7 +231,7 @@ def image_optimization(
     dds_loss.sigma_exp = config.sigma_exp
     image_source = torch.from_numpy(image).float().permute(2, 0, 1) / 127.5 - 1
     image_source = image_source.unsqueeze(0).to(device)
-    with torch.no_grad():
+    with torch.inference_mode():
         z_source: T = (
             pipeline.vae.encode(image_source)["latent_dist"].mean
             * pipeline.vae.scaling_factor

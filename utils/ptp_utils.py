@@ -1,11 +1,12 @@
 # Modified from Prompt-to-Prompt(ICLR 2023) https://github.com/google/prompt-to-prompt
 import abc
+from math import log2, sqrt
 from typing import List
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from einops import rearrange
+from omegaconf import DictConfig
 
 
 class AttentionControl(abc.ABC):
@@ -54,7 +55,7 @@ class AttentionStore(AttentionControl):
 
     def forward(self, attn, is_cross: bool, place_in_unet: str):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
-        # for stable diffusion v1.5, attention heads = 8
+        # for stable diffusion v1.5 series, attention heads = 8
         # and in dds loss, attn uses batched input
         # so [0:8] is null text and source img, [8:16] is null text and target img
         # [16:24] is source text and source img, [24:32] is target text and target img
@@ -88,7 +89,7 @@ class AttentionStore(AttentionControl):
         self.attention_store = {}
 
 
-def register_attention_control(model, controller):
+def register_attention_control(model, controller, config):
     def ca_forward(self, place_in_unet):
         to_out = self.to_out
         if type(to_out) is torch.nn.modules.container.ModuleList:
@@ -128,7 +129,7 @@ def register_attention_control(model, controller):
             attn = sim.softmax(dim=-1)
 
             if is_cross:
-                x[2] = x[2] + 0.5 * (x[3] - x[2])
+                x[2] = x[2] + config.target_factor * (x[3] - x[2])
                 q = self.to_q(x)
                 k = self.to_k(context)
                 v = self.to_v(context)
@@ -170,72 +171,45 @@ def register_attention_control(model, controller):
     controller.num_att_layers = cross_att_count
 
 
-def aggregate_all_attention(
-    prompts,
-    attention_store: AttentionStore,
-    from_where: List[str],
-    is_cross: bool,
-    select: int,
-):
-    attention_maps = attention_store.get_average_attention()
-    att_8 = []
-    att_16 = []
-    att_32 = []
-    att_64 = []
-    for location in from_where:
-        for item in attention_maps[f"{location}_{'cross' if is_cross else 'self'}"]:
-            if item.shape[0] == 8 * 8:
-                cross_maps = item.reshape(len(prompts), 8, 8, item.shape[-1])[select]
-                att_8.append(cross_maps)
-            if item.shape[0] == 16 * 16:
-                cross_maps = item.reshape(len(prompts), 16, 16, item.shape[-1])[select]
-                att_16.append(cross_maps)
-            if item.shape[0] == 32 * 32:
-                cross_maps = item.reshape(len(prompts), 32, 32, item.shape[-1])[select]
-                att_32.append(cross_maps)
-            if item.shape[0] == 64 * 64:
-                cross_maps = item.reshape(len(prompts), 64, 64, item.shape[-1])[select]
-                att_64.append(cross_maps)
-    atts = []
-    for att in [att_8, att_16, att_32, att_64]:
-        att = torch.stack(att, dim=0)
-        att = att.sum(0) / att.shape[0]
-        atts.append(att.cpu())
-    return atts
-
-
 def aggregate_cross_att(
-    prompts,
     controller: AttentionStore,
-    pos,
-    weight=[0.3, 0.5, 0.1, 0.1],
-    cross_threshold=0.4,
+    prompt: str,
+    pos: List[int],
+    config: DictConfig,
 ):
-    cross_att_map = []
-    layers = ["down", "mid", "up"]
-    cross_attention_maps = aggregate_all_attention(prompts, controller, layers, True, 0)
-    for idx, res in enumerate([8, 16, 32, 64]):
-        next_word = prompts[0].split(" ")[4]
-        if next_word.endswith("ing"):
-            cross_att = cross_attention_maps[idx][:, :, pos + [pos[-1] + 1]]
-            cross_att = cross_att.mean(2).view(res, res).float()
-        else:
-            cross_att = cross_attention_maps[idx][:, :, pos]
-            cross_att = cross_att.mean(2).view(res, res).float()
-        if res != 64:
-            cross_att = cross_att.unsqueeze(0).unsqueeze(0)
-            cross_att = F.interpolate(cross_att, size=(64, 64), mode="bilinear")
-            cross_att = cross_att.squeeze()
-        cross_att = cross_att / cross_att.max()
-        cross_att_map.append(cross_att * weight[idx])
-
-    cross_att_map = torch.stack(cross_att_map).sum(0).view(64 * 64, 1)
-    cross_att_map = F.sigmoid(8 * (cross_att_map - cross_threshold))
-    cross_att_map = (cross_att_map - cross_att_map.min()) / (
-        cross_att_map.max() - cross_att_map.min()
+    # 1. get all att maps
+    att_maps = controller.get_average_attention()
+    # 2. extract cross att maps
+    cross_atts = [[], [], [], []]  # respect for res [8, 16, 32, 64]
+    for location in ["down", "mid", "up"]:
+        for item in att_maps[f"{location}_cross"]:  # item shape: (res*res, prompt len)
+            res = round(sqrt(item.shape[0]))
+            res_idx = round(log2(res)) - 3
+            cross_maps = item.reshape(res, res, item.shape[-1])
+            cross_atts[res_idx].append(cross_maps)
+    cross_atts = [torch.stack(att).mean(0) for att in cross_atts]
+    # 3. get cross att maps for specific words
+    next_word = prompt.split(" ")[4]
+    if next_word.endswith("ing"):
+        cross_atts = [att[:, :, pos + [pos[-1] + 1]] for att in cross_atts]
+    else:
+        cross_atts = [att[:, :, pos] for att in cross_atts]
+    cross_atts = [att.mean(2) for att in cross_atts]
+    # 4. interpolate these cross att maps to 64x64, and then apply weight
+    cross_atts_64 = []
+    for idx, att in enumerate(cross_atts):
+        att = att.unsqueeze(0).unsqueeze(0)
+        att = F.interpolate(att, size=(64, 64), mode="bilinear")
+        att = att.squeeze() / att.max()
+        cross_atts_64.append(att * config.cross_weight[idx])
+    # 5. sum up and normalize these cross att maps
+    cross_atts_64 = torch.stack(cross_atts_64).sum(0).view(64 * 64, 1)
+    cross_atts_64 = F.sigmoid(config.norm_factor * (cross_atts_64 - config.norm_bias))
+    cross_atts_64 = (cross_atts_64 - cross_atts_64.min()) / (
+        cross_atts_64.max() - cross_atts_64.min()
     )
 
-    return cross_att_map
+    return cross_atts_64
 
 
 def aggregate_self_att(controller: AttentionStore):
@@ -245,11 +219,12 @@ def aggregate_self_att(controller: AttentionStore):
     self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
 
     weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
-    weight = [np.sqrt(weights.shape[-2]) for weights in weight_list]
-    weight = weight / np.sum(weight)
+    weight = [sqrt(weights.shape[-2]) for weights in weight_list]
+    weight_sum = sum(weight)
+    weight = [w / weight_sum for w in weight]
     aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
     for index, weights in enumerate(weight_list):
-        size = int(np.sqrt(weights.shape[-1]))
+        size = round(sqrt(weights.shape[-1]))
         ratio = int(64 / size)
         weights = weights.reshape(-1, size, size).unsqueeze(0)
         weights = F.interpolate(weights, size=(64, 64), mode="bilinear")
@@ -259,12 +234,9 @@ def aggregate_self_att(controller: AttentionStore):
         weights = weights.repeat_interleave(ratio, dim=0)
         weights = weights.repeat_interleave(ratio, dim=1)
         aggre_weights += weights * weight[index]
-    return aggre_weights.view(64 * 64, 64 * 64).cpu()
+    return aggre_weights.view(64 * 64, 64 * 64)
 
 
 def aggregate_self_64(controller: AttentionStore):
-    return (
-        torch.stack([att for att in controller.attention_store["up_self"][6:9]])
-        .mean(0)
-        .cpu()
-    )
+    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
+    return torch.stack(self_att_64).mean(0)

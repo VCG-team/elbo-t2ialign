@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path).to(device)
     controller = AttentionStore()
-    register_attention_control(pipeline, controller)
+    register_attention_control(pipeline, controller, config)
 
     if config.use_blip:
         blip_processor = BlipProcessor.from_pretrained(config.blip_path)
@@ -117,13 +117,7 @@ if __name__ == "__main__":
             image_optimization(pipeline, img_512, text_source, text_target, config)
 
             # 3. refine attention map
-            att_map = aggregate_cross_att(
-                [text_source],
-                controller,
-                pos,
-                weight=[0.3, 0.5, 0.1, 0.1],
-                cross_threshold=config.norm_bias,
-            )
+            att_map = aggregate_cross_att(controller, text_source, pos, config)
 
             self_att = aggregate_self_att(controller)
             for _ in range(config.self_times):
