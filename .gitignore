@@ -11,5 +11,5 @@ VOCdevkit
 # output
 output
 
-# config
-config
+# tmp folder
+tmp
