@@ -119,7 +119,7 @@ if __name__ == "__main__":
             # 3. refine attention map
             att_map = aggregate_cross_att(controller, text_source, pos, config)
 
-            self_att = aggregate_self_att(controller)
+            self_att = aggregate_self_att(controller, config)
             for _ in range(config.self_times):
                 att_map = torch.matmul(self_att, att_map)
 
@@ -127,14 +127,8 @@ if __name__ == "__main__":
             for _ in range(config.self_64_times):
                 att_map = torch.matmul(self_64, att_map)
 
-            # 4. normalize attention map
-            att_map = att_map.view(64, 64)
-            att_map = (att_map - att_map.min()) / (att_map.max() - att_map.min())
-            att_map = F.sigmoid(config.norm_factor * (att_map - config.norm_bias))
-            att_map = (att_map - att_map.min()) / (att_map.max() - att_map.min())
-
-            # 5. save attention map as mask
-            mask = att_map.unsqueeze(0).unsqueeze(0)
+            # 4. save attention map as mask
+            mask = att_map.view(64, 64).unsqueeze(0).unsqueeze(0)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze(0).repeat(3, 1, 1).permute(1, 2, 0).cpu().numpy()

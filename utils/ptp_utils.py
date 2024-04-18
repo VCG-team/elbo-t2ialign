@@ -189,8 +189,7 @@ def aggregate_cross_att(
             if cross_layer_cnt not in config.valid_cross_layer:
                 continue
             res = round(sqrt(item.shape[0]))
-            cross_maps = item.reshape(res, res, item.shape[-1])
-            cross_atts.append(cross_maps)
+            cross_atts.append(item.reshape(res, res, item.shape[-1]))
 
     # 3. get cross att maps for specific words
     next_word = prompt.split(" ")[4]
@@ -206,44 +205,45 @@ def aggregate_cross_att(
     for idx, att in enumerate(cross_atts):
         att = att.unsqueeze(0).unsqueeze(0)
         att = F.interpolate(att, size=(64, 64), mode="bilinear")
-        att = att.squeeze() / att.max()
         cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
 
-    # 5. sum up and normalize these cross att maps
-    cross_atts_64 = torch.stack(cross_atts_64).sum(0).view(64 * 64, 1)
-    cross_atts_64 = F.sigmoid(config.norm_factor * (cross_atts_64 - config.norm_bias))
-    cross_atts_64 = (cross_atts_64 - cross_atts_64.min()) / (
-        cross_atts_64.max() - cross_atts_64.min()
-    )
-
-    return cross_atts_64
+    # 5. sum up these cross att maps
+    return torch.stack(cross_atts_64).sum(0).view(64 * 64, 1)
 
 
-def aggregate_self_att(controller: AttentionStore):
-    self_att_8 = [att for att in controller.attention_store["mid_self"]]
-    self_att_16 = [att for att in controller.attention_store["up_self"][0:3]]
-    self_att_32 = [att for att in controller.attention_store["up_self"][3:6]]
-    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
+def aggregate_self_att(
+    controller: AttentionStore,
+    config: DictConfig,
+):
+    # 1. get all att maps
+    att_maps = controller.get_average_attention()
 
-    weight_list = self_att_64 + self_att_32 + self_att_16 + self_att_8
-    weight = [sqrt(weights.shape[-2]) for weights in weight_list]
-    weight_sum = sum(weight)
-    weight = [w / weight_sum for w in weight]
-    aggre_weights = torch.zeros((64, 64, 64, 64)).to(self_att_64[0].device)
-    for index, weights in enumerate(weight_list):
-        size = round(sqrt(weights.shape[-1]))
-        ratio = int(64 / size)
-        weights = weights.reshape(-1, size, size).unsqueeze(0)
-        weights = F.interpolate(weights, size=(64, 64), mode="bilinear")
-        weights = weights.squeeze()
-        weights = weights.reshape(size, size, 64, 64)
-        weights = weights / torch.sum(weights, dim=(2, 3), keepdim=True)
-        weights = weights.repeat_interleave(ratio, dim=0)
-        weights = weights.repeat_interleave(ratio, dim=1)
-        aggre_weights += weights * weight[index]
-    return aggre_weights.view(64 * 64, 64 * 64)
+    # 2. extract self att maps
+    self_layer_cnt = -1
+    self_atts = []
+    for location in ["down", "mid", "up"]:
+        for item in att_maps[f"{location}_self"]:  # item shape: (res*res, res*res)
+            self_layer_cnt += 1
+            if self_layer_cnt not in config.valid_self_layer:
+                continue
+            self_atts.append(item)
+
+    # 3. interpolate these self att maps to 64x64, and then apply weight
+    self_atts_64 = []
+    self_weight_sum = sum(config.self_weight)
+    for idx, att in enumerate(self_atts):
+        att = att.unsqueeze(0).unsqueeze(0)
+        att = F.interpolate(att, size=(64 * 64, 64 * 64), mode="bilinear")
+        att = att.squeeze()
+        self_atts_64.append(att * config.self_weight[idx] / self_weight_sum)
+
+    # 4. sum up these self att maps
+    return torch.stack(self_atts_64).sum(0)
 
 
 def aggregate_self_64(controller: AttentionStore):
-    self_att_64 = [att for att in controller.attention_store["up_self"][6:9]]
-    return torch.stack(self_att_64).mean(0)
+    # 1. get all att maps
+    att_maps = controller.get_average_attention()
+
+    # 2. take mean for self att maps with 64x64 resolution
+    return torch.stack(att_maps["up_self"][6:9]).mean(0)

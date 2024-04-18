@@ -231,12 +231,11 @@ def image_optimization(
     dds_loss.sigma_exp = config.sigma_exp
     image_source = torch.from_numpy(image).float().permute(2, 0, 1) / 127.5 - 1
     image_source = image_source.unsqueeze(0).to(device)
-    with torch.no_grad():
+    with torch.inference_mode():
         z_source: T = (
             pipeline.vae.encode(image_source)["latent_dist"].mean
             * pipeline.vae.scaling_factor
         )
-        image_target = image_source.clone()
         # shape: (1, num_token, emb_dim)
         embedding_null = get_text_embeddings(pipeline, "", device=device)
         embedding_text = get_text_embeddings(pipeline, text_source, device=device)
@@ -247,11 +246,9 @@ def image_optimization(
         embedding_source = torch.stack([embedding_null, embedding_text], dim=1)
         embedding_target = torch.stack([embedding_null, embedding_text_target], dim=1)
 
-    guidance_scale = config.guidance_scale
-    image_target.requires_grad = True
-
     z_target = z_source.clone()
     z_target.requires_grad = True
+    guidance_scale = config.guidance_scale
     optimizer = SGD(params=[z_target], lr=config.lr)
 
     for t in config.timesteps:
