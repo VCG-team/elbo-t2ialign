@@ -173,7 +173,6 @@ def register_attention_control(
 
 def aggregate_cross_att(
     controller: AttentionStore,
-    prompt: str,
     pos: List[int],
     config: DictConfig,
 ):
@@ -188,22 +187,17 @@ def aggregate_cross_att(
             cross_layer_cnt += 1
             if cross_layer_cnt not in config.valid_cross_layer:
                 continue
-            res = round(sqrt(item.shape[0]))
-            cross_atts.append(item.reshape(res, res, item.shape[-1]))
+            cross_atts.append(item)
 
     # 3. get cross att maps for specific words
-    next_word = prompt.split(" ")[4]
-    if next_word.endswith("ing"):
-        cross_atts = [att[:, :, pos + [pos[-1] + 1]] for att in cross_atts]
-    else:
-        cross_atts = [att[:, :, pos] for att in cross_atts]
-    cross_atts = [att.mean(2) for att in cross_atts]
+    cross_atts = [att[:, pos].mean(1) for att in cross_atts]
 
     # 4. interpolate these cross att maps to 64x64, and then apply weight
     cross_atts_64 = []
     cross_weight_sum = sum(config.cross_weight)
     for idx, att in enumerate(cross_atts):
-        att = att.unsqueeze(0).unsqueeze(0)
+        res = round(sqrt(att.shape[0]))
+        att = att.resahpe(res, res).unsqueeze(0).unsqueeze(0)
         att = F.interpolate(att, size=(64, 64), mode="bilinear")
         cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
 

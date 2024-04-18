@@ -85,10 +85,10 @@ if __name__ == "__main__":
         for i in range(y.shape[0]):
             # 1. prompts generation
             cls_name = config.category[y[i].item()]
-            text_source = f"a photograph of {cls_name}."
-            text_target = f"a photograph of ''."
             cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
             pos = [4 + i for i in range(cls_name_len)]
+            text_source = f"a photograph of {cls_name}."
+            text_target = f"a photograph of ''."
 
             if config.use_blip:
                 with torch.inference_mode():
@@ -99,6 +99,9 @@ if __name__ == "__main__":
                     blip_out_prompt = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
                     )
+                    next_word = blip_out_prompt[len(text_source) :].split(" ")[0]
+                    if next_word.endswith("ing"):
+                        pos.append(pos[-1] + 1)
                     text_source = (
                         text_source[:-1]
                         + "++"
@@ -108,6 +111,7 @@ if __name__ == "__main__":
                         + "."
                     )
                     text_target = text_target[:-1] + "."
+
             if config.print_prompt:
                 tqdm.write(f"image: {k}, source_text: {text_source}")
                 tqdm.write(f"image: {k}, target_text: {text_target}")
