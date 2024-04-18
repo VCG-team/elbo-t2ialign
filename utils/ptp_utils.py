@@ -9,6 +9,9 @@ from diffusers import StableDiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
 
+T = torch.Tensor
+TL = List[T]
+
 
 class AttentionControl(abc.ABC):
 
@@ -181,7 +184,7 @@ def aggregate_cross_att(
 
     # 2. extract cross att maps
     cross_layer_cnt = -1
-    cross_atts = []
+    cross_atts: TL = []
     for location in ["down", "mid", "up"]:
         for item in att_maps[f"{location}_cross"]:  # item shape: (res*res, prompt len)
             cross_layer_cnt += 1
@@ -197,7 +200,7 @@ def aggregate_cross_att(
     cross_weight_sum = sum(config.cross_weight)
     for idx, att in enumerate(cross_atts):
         res = round(sqrt(att.shape[0]))
-        att = att.resahpe(res, res).unsqueeze(0).unsqueeze(0)
+        att = att.reshape(res, res).unsqueeze(0).unsqueeze(0)
         att = F.interpolate(att, size=(64, 64), mode="bilinear")
         cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
 
@@ -214,7 +217,7 @@ def aggregate_self_att(
 
     # 2. extract self att maps
     self_layer_cnt = -1
-    self_atts = []
+    self_atts: TL = []
     for location in ["down", "mid", "up"]:
         for item in att_maps[f"{location}_self"]:  # item shape: (res*res, res*res)
             self_layer_cnt += 1
@@ -226,13 +229,18 @@ def aggregate_self_att(
     self_atts_64 = []
     self_weight_sum = sum(config.self_weight)
     for idx, att in enumerate(self_atts):
-        att = att.unsqueeze(0).unsqueeze(0)
-        att = F.interpolate(att, size=(64 * 64, 64 * 64), mode="bilinear")
-        att = att.squeeze()
+        res = round(sqrt(att.shape[0]))
+        # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
+        # code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
+        # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
+        att = att.reshape(res, res, res, res)
+        att: T = F.interpolate(att, size=(64, 64), mode="bilinear")
+        att = att.repeat_interleave(round(64 / res), dim=0)
+        att = att.repeat_interleave(round(64 / res), dim=1)
         self_atts_64.append(att * config.self_weight[idx] / self_weight_sum)
 
     # 4. sum up these self att maps
-    return torch.stack(self_atts_64).sum(0)
+    return torch.stack(self_atts_64).sum(0).view(64 * 64, 64 * 64)
 
 
 def aggregate_self_64(controller: AttentionStore):

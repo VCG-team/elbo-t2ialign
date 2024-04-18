@@ -121,7 +121,7 @@ if __name__ == "__main__":
             image_optimization(pipeline, img_512, text_source, text_target, config)
 
             # 3. refine attention map
-            att_map = aggregate_cross_att(controller, text_source, pos, config)
+            att_map = aggregate_cross_att(controller, pos, config)
 
             self_att = aggregate_self_att(controller, config)
             for _ in range(config.self_times):
