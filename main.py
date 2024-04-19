@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    config_path = "./configs/voc12_main.yaml"
+    config_path = "./configs/voc12/voc12_main.yaml"
     config = OmegaConf.load(config_path)
 
     img_output_path = f"{config.output_path}/images"
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (img, label) in tqdm(
+    for k, (img, label,name) in tqdm(
         enumerate(dataset), total=len(dataset), desc="Processing images..."
     ):
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size

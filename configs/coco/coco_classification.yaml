@@ -1,0 +1,106 @@
+# pretrained model checkpoints
+clip_model_path : '/data2/wjl/sdsseg/open_vocabulary/clip-vit-large-patch14'
+blip_model_path : '/data/wjl/ptp_diffusion/blip/blip-image-captioning-large'
+clip_device : 'cuda:5'
+blip_device : 'cuda:5'
+# dataset parameters
+output_path : '/data2/wjl/ddsseg/data/coco'
+img_list : '/data2/wjl/ddsseg/data/coco/coco_val_id.txt'
+data_path : '/data/wjl/data/COCO2014'
+data_set : 'COCO'
+label_file_path : '/data2/wjl/ddsseg/data/coco/coco_cls_labels.npy'
+# method parameters
+enable_text_similarity : True
+enable_text_and_image_similarity : True
+enable_synonym_matching : True
+# algorithm parameters
+input_size : 224
+num_workers : 0
+pin_mem : True
+train_interpolation : 'bicubic'
+nb_classes : 0
+text_threshold : 0.8
+text_and_image_threshold : 0.97
+
+labels_synonym : {
+    'person': ['person', 'they', 'he', 'she', 'him', 'her', 'man', 'woman', 'child', 'baby', 'skateboarder', 'speaker', 'boy', 'girl', 'bride', 'groom', 'parent', 'couple', 'people', 'player', 'wrestler', 'snowboarder', 'chef', 'skier'],
+    'bicycle': ['bicycle'],
+    'car': ['car', 'jeep', 'suv', 'chrysler', 'cooper', 'van', 'taxi', 'cab'],
+    'motorbike': ['motorbike', 'scooter', 'moped'],
+    'aeroplane': ['aeroplane', 'plane', 'airplane', 'jet', 'jetliner', 'shuttle'],
+    'bus': ['bus', 'tram'],
+    'train': ['train'],
+    'truck': ['truck', 'van'],
+    'boat': ['boat', 'sailboat', 'ship', 'kayak', 'canoe'],
+    'traffic light': ['traffic light', 'stoplight'],
+    'fire hydrant': ['fire hydrant', 'hydrant'],
+    'stop sign': ['stop sign'],
+    'parking meter': ['parking meter'],
+    'bench': ['bench'],
+    'bird': ['bird', 'rooster', 'hummingbird', 'seagull', 'parrot', 'owl', 'pigeon', 'flamingo', 'emu', 'penguin', 'duck', 'eagle', 'ostrich', 'peacock', 'pelican', 'swan', 'chicken'],
+    'cat': ['cat', 'kitten', 'lynx'],
+    'dog': ['dog', 'dachshund', 'puppy', 'pug'],
+    'horse': ['horse', 'pony'],
+    'sheep': ['sheep', 'lamb', 'goat'],
+    'cow': ['cow', 'bull', 'bison', 'cattle'],
+    'elephant': ['elephant'],
+    'bear': ['bear'],
+    'zebra': ['zebra'],
+    'giraffe': ['giraffe'],
+    'backpack': ['backpack'],
+    'umbrella': ['umbrella'],
+    'handbag': ['handbag'],
+    'tie': ['tie'],
+    'suitcase': ['suitcase', 'luggage'],
+    'frisbee': ['frisbee'],
+    'skis': ['skis'],
+    'snowboard': ['snowboard'],
+    'sports ball': ['sports ball'],
+    'kite': ['kite'],
+    'baseball bat': ['baseball bat'],
+    'baseball glove': ['baseball glove'],
+    'skateboard': ['skateboard'],
+    'surfboard': ['surfboard'],
+    'tennis racket': ['tennis racket'],
+    'bottle': ['bottle'],
+    'wine glass': ['wine glass'],
+    'cup': ['cup'],
+    'fork': ['fork'],
+    'knife': ['knife'],
+    'spoon': ['spoon'],
+    'bowl': ['bowl'],
+    'banana': ['banana'],
+    'apple': ['apple'],
+    'sandwich': ['sandwich'],
+    'orange': ['orange', 'orange'],
+    'broccoli': ['broccoli'],
+    'carrot': ['carrot'],
+    'hot dog': ['hot dog'],
+    'pizza': ['pizza'],
+    'donut': ['donut'],
+    'cake': ['cake'],
+    'chair': ['chair', 'stool'],
+    'sofa': ['sofa'],
+    'pottedplant': ['pottedplant'],
+    'bed': ['bed'],
+    'diningtable': ['diningtable'],
+    'toilet': ['toilet', 'restroom'],
+    'tvmonitor': ['tvmonitor', 'television', 'tv', 'monitor'],
+    'laptop': ['laptop'],
+    'mouse': ['mouse'],
+    'remote': ['remote', 'control'],
+    'keyboard': ['keyboard'],
+    'cell phone': ['cell phone', 'phone'],
+    'microwave': ['microwave'],
+    'oven': ['oven', 'stove'],
+    'toaster': ['toaster'],
+    'sink': ['sink'],
+    'refrigerator': ['refrigerator'],
+    'book': ['book'],
+    'clock': ['clock'],
+    'vase': ['vase'],
+    'scissors': ['scissors', 'scissor'],
+    'teddy bear': ['teddy bear'],
+    'hair drier': ['hair drier'],
+    'toothbrus': ['toothbrus', 'toothbrush'],
+}

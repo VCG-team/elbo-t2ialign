@@ -36,7 +36,7 @@ class VOC12Dataset(Dataset):
         self,
         img_name_list_path,
         voc12_root,
-        label_file_path="./data/voc12_cls_labels.npy",
+        label_file_path="./data/voc12/voc12_cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -51,7 +51,32 @@ class VOC12Dataset(Dataset):
             os.path.join(self.voc12_root, "JPEGImages", name + ".jpg")
         ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
-        return img, label
+        return img, label, name
+
+    def __len__(self):
+        return len(self.img_name_list)
+
+class VOC10Dataset(Dataset):
+    def __init__(
+        self, 
+        img_name_list_path, 
+        voc10_root,
+        label_file_path="./data/voc10/voc10_cls_labels.npy",
+    ):
+        self.img_name_list = load_img_name_list(img_name_list_path)
+        self.label_list = load_image_label_list_from_npy(
+            self.img_name_list, label_file_path
+            )
+        self.voc10_root = voc10_root
+        self.train = "train" in img_name_list_path
+
+    def __getitem__(self, idx):
+        name = self.img_name_list[idx]
+        img = PIL.Image.open(
+            os.path.join(self.voc10_root, "JPEGImages", name + ".jpg")
+        ).convert("RGB")
+        label = torch.from_numpy(self.label_list[idx])
+        return img, label, name
 
     def __len__(self):
         return len(self.img_name_list)
@@ -62,7 +87,7 @@ class COCOClsDataset(Dataset):
         self,
         img_name_list_path,
         coco_root,
-        label_file_path="./data/coco_cls_labels.npy",
+        label_file_path="./data/coco/coco_cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -83,7 +108,26 @@ class COCOClsDataset(Dataset):
             ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
 
-        return img, label
+        return img, label, name
 
     def __len__(self):
         return len(self.img_name_list)
+
+def build_dataset(args):
+    dataset = None
+    nb_classes = None
+
+    if args.data_set == 'VOC12seg':
+        dataset = VOC12Dataset(img_name_list_path=args.img_list,
+                                voc12_root=args.data_path, label_file_path=args.label_file_path)
+        nb_classes = 20
+    elif args.data_set == 'COCO':
+        dataset = COCOClsDataset(img_name_list_path=args.img_list,
+                                 coco_root=args.data_path, label_file_path=args.label_file_path)
+        nb_classes = 80
+    elif args.data_set == 'VOC10seg':
+        dataset = VOC10Dataset(img_name_list_path=args.img_list,
+                                voc10_root=args.data_path,label_file_path=args.label_file_path)
+        nb_classes = 59
+
+    return dataset, nb_classes
