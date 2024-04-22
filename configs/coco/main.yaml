@@ -9,6 +9,7 @@ diffusion_path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffu
 blip_path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
 
 # main process settings (main.py)
+dtype: 'fp16'
 device: 4
 seed: 4307
 use_blip: True

@@ -52,7 +52,12 @@ if __name__ == "__main__":
     dataset = build_dataset(config)
     OmegaConf.save(config, os.path.join(config.output_path, "config.yaml"))
 
-    pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path).to(device)
+    if config.dtype == 'fp16':
+        dtype = torch.float16
+    else:
+        dtype = torch.float32
+
+    pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path, torch_dtype=dtype).to(device)
     controller = AttentionStore()
     register_attention_control(pipeline, controller, config)
 
@@ -132,7 +137,6 @@ if __name__ == "__main__":
             self_64 = aggregate_self_64(controller)
             for _ in range(config.self_64_times):
                 att_map = torch.matmul(self_64, att_map)
-
             # 4. save attention map as mask
             mask = att_map.view(64, 64).unsqueeze(0).unsqueeze(0)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")

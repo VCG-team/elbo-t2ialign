@@ -3,6 +3,7 @@ import abc
 from math import sqrt
 from typing import List
 
+from numpy import dtype
 import torch
 import torch.nn.functional as F
 from diffusers import StableDiffusionPipeline
@@ -126,7 +127,7 @@ def register_attention_control(
                 sim.masked_fill_(~mask, max_neg_value)
 
             # attention, what we cannot get enough of
-            attn = sim.softmax(dim=-1)
+            attn = sim.softmax(dim=-1,dtype=sim.dtype)
 
             # for stable diffusion v1.5 series, attention heads = 8
             # and in dds loss, attn uses batched input(batch size = 4)
@@ -138,7 +139,7 @@ def register_attention_control(
                 source_q = rearrange(source_q, "b n (h d) -> (b h) n d", h=h)
                 source_k = k[16:24]
                 sim = torch.einsum("b i d, b j d -> b i j", source_q, source_k)
-                source_att = (sim * self.scale).softmax(dim=-1)
+                source_att = (sim * self.scale).softmax(dim=-1,dtype=sim.dtype)
                 # save cross attention between source text and source img(take mean for 8 attention heads)
                 controller(source_att.mean(0), is_cross, place_in_unet)
             else:
