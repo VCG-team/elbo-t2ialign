@@ -1,7 +1,6 @@
 import os
-import shutil
-import sys
 import warnings
+from argparse import ArgumentParser
 
 import cv2
 import numpy as np
@@ -39,22 +38,19 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    config_path = "./configs/voc12/main.yaml"
-    config = OmegaConf.load(config_path)
+    parser = ArgumentParser()
+    parser.add_argument("--config", type=str, default="./configs/voc12/main.yaml")
 
-    img_output_path = f"{config.output_path}/images"
-    code_output_path = f"{config.output_path}/codes"
+    args, unknown = parser.parse_known_args()
+    config = OmegaConf.load(args.config)
+    config.merge_with_dotlist(unknown)
+
+    img_output_path = os.path.join(config.output_path, "images")
+    os.makedirs(img_output_path, exist_ok=True)
     device = torch.device(config.device)
     same_seeds(config.seed)
-
-    os.makedirs(code_output_path, exist_ok=True)
-    os.makedirs(img_output_path, exist_ok=True)
-
-    shutil.copy(os.path.abspath(__file__), code_output_path)
-    shutil.copy("./utils/ptp_utils.py", code_output_path)
-    shutil.copy(config_path, code_output_path)
-
     dataset = build_dataset(config)
+    OmegaConf.save(config, os.path.join(config.output_path, "config.yaml"))
 
     pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path).to(device)
     controller = AttentionStore()
@@ -76,7 +72,7 @@ if __name__ == "__main__":
         y = torch.where(label)[0]
         img_512 = np.array(img.resize((512, 512), resample=Image.BILINEAR))
 
-        # generate mask for each label in the image
+        # generate mask for each label in the image·
         for i in range(y.shape[0]):
             # 1. prompts generation
             cls_name = config.category[y[i].item()]
@@ -87,6 +83,7 @@ if __name__ == "__main__":
 
             if config.use_blip:
                 with torch.inference_mode():
+                    # blip inference
                     blip_inputs = blip_processor(
                         img, text_source[:-1], return_tensors="pt"
                     ).to(device)
@@ -94,9 +91,13 @@ if __name__ == "__main__":
                     blip_out_prompt = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
                     )
+                    # update pos for cross attention extraction
                     next_word = blip_out_prompt[len(text_source) :].split(" ")[0]
                     if next_word.endswith("ing"):
                         pos.append(pos[-1] + 1)
+                    # refer to clip-es (CVPR 2023), we add background categories to the prompt
+                    # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
+                    # paper: https://arxiv.org/abs/2212.09506
                     text_source = (
                         text_source[:-1]
                         + "++"

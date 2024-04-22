@@ -231,7 +231,7 @@ def aggregate_self_att(
     for idx, att in enumerate(self_atts):
         res = round(sqrt(att.shape[0]))
         # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
-        # code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
+        # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
         # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
         att = att.reshape(res, res, res, res)
         att: T = F.interpolate(att, size=(64, 64), mode="bilinear")
