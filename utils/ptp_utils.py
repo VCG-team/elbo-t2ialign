@@ -133,7 +133,7 @@ def register_attention_control(
             # so x[0] is null text and source img, x[1] is null text and target img
             # x[2] is source text and source img, x[3] is target text and target img
             if is_cross:
-                source_x = x[2] + config.target_factor * (x[3] - x[2])
+                source_x = x[2] + config.target_factor * (x[2] - x[3])
                 source_q = self.to_q(source_x.unsqueeze(0))
                 source_q = rearrange(source_q, "b n (h d) -> (b h) n d", h=h)
                 source_k = k[16:24]

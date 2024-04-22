@@ -13,7 +13,7 @@ from PIL import Image
 from tqdm import tqdm
 from transformers import BlipForConditionalGeneration, BlipProcessor
 
-from datasets import COCOClsDataset, VOC12Dataset
+from datasets import build_dataset
 from utils.dds_utils import image_optimization
 from utils.ptp_utils import (
     AttentionStore,
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    config_path = "./configs/voc12/voc12_main.yaml"
+    config_path = "./configs/voc12/main.yaml"
     config = OmegaConf.load(config_path)
 
     img_output_path = f"{config.output_path}/images"
@@ -54,12 +54,7 @@ if __name__ == "__main__":
     shutil.copy("./utils/ptp_utils.py", code_output_path)
     shutil.copy(config_path, code_output_path)
 
-    if config.dataset == "voc12":
-        dataset = VOC12Dataset(config.data_name_list, config.data_root)
-    elif config.dataset == "coco":
-        dataset = COCOClsDataset(config.data_name_list, config.data_root)
-    else:
-        sys.exit("Dataset not supported")
+    dataset = build_dataset(config)
 
     pipeline = StableDiffusionPipeline.from_pretrained(config.diffusion_path).to(device)
     controller = AttentionStore()
@@ -72,7 +67,7 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (img, label,name) in tqdm(
+    for k, (img, label, name) in tqdm(
         enumerate(dataset), total=len(dataset), desc="Processing images..."
     ):
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
@@ -110,7 +105,13 @@ if __name__ == "__main__":
                         + ",".join(config.bg_category)
                         + "."
                     )
-                    text_target = text_target[:-1] + "."
+                    text_target = (
+                        text_target[:-1]
+                        + blip_out_prompt[len(text_source) - 1 :]
+                        + " and "
+                        + ",".join(config.bg_category)
+                        + "."
+                    )
 
             if config.print_prompt:
                 tqdm.write(f"image: {k}, source_text: {text_source}")

@@ -194,7 +194,7 @@ def apply_metrics(
 
 if __name__ == "__main__":
 
-    config_path = "./configs/voc12_evaluation.yaml"
+    config_path = "./configs/voc12/evaluation.yaml"
     config: DictConfig = OmegaConf.load(config_path)
 
     if config.start >= config.end:
