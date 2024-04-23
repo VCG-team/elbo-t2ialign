@@ -102,16 +102,16 @@ if __name__ == "__main__":
                     # refer to clip-es (CVPR 2023), we add background categories to the prompt
                     # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
                     # paper: https://arxiv.org/abs/2212.09506
-                    text_source = (
-                        text_source[:-1]
-                        + "++"
+                    text_target = (
+                        text_target[:-1]
                         + blip_out_prompt[len(text_source) - 1 :]
                         + " and "
                         + ",".join(config.bg_category)
                         + "."
                     )
-                    text_target = (
-                        text_target[:-1]
+                    text_source = (
+                        text_source[:-1]
+                        + "++"
                         + blip_out_prompt[len(text_source) - 1 :]
                         + " and "
                         + ",".join(config.bg_category)
