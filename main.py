@@ -40,8 +40,8 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--config", type=str, default="./configs/voc12/main.yaml")
-
     args, unknown = parser.parse_known_args()
+
     config = OmegaConf.load(args.config)
     config.merge_with_dotlist(unknown)
 

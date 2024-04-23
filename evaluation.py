@@ -2,31 +2,17 @@
 import json
 import os
 import sys
-import time
+from argparse import ArgumentParser
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-import torch
-import torch.nn.functional as F
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
 category = []
 num_cls = 0
-
-
-def writelog(filepath: str, log: Dict, comment: str) -> None:
-
-    logfile = open(filepath, "a")
-
-    logfile.write(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-    logfile.write("\t%s\n\n" % comment)
-    logfile.write(json.dumps(log, indent=4))
-    logfile.write("\n\n=====================================\n\n")
-
-    logfile.close()
 
 
 def load_predict_and_gt(
@@ -62,12 +48,6 @@ def load_predict_and_gt(
             predict_cls = (
                 np.array(Image.open(predict_file), dtype=np.float32)[:, :, 0] / 255
             )
-            predict_cls = F.interpolate(
-                torch.tensor(predict_cls).unsqueeze(0).unsqueeze(0),
-                size=(h, w),
-                mode="bilinear",
-                align_corners=False,
-            )[0][0].numpy()
             cls_idx = category.index(cls)
             predict[cls_idx] = predict_cls
 
@@ -194,8 +174,12 @@ def apply_metrics(
 
 if __name__ == "__main__":
 
-    config_path = "./configs/voc12/evaluation.yaml"
-    config: DictConfig = OmegaConf.load(config_path)
+    parser = ArgumentParser()
+    parser.add_argument("--config", type=str, default="./configs/voc12/evaluation.yaml")
+    args, unknown = parser.parse_known_args()
+
+    config = OmegaConf.load(args.config)
+    config.merge_with_dotlist(unknown)
 
     if config.start >= config.end:
         sys.exit("Start threshold should be less than end")
@@ -208,7 +192,7 @@ if __name__ == "__main__":
         sys.exit("Dataset not supported")
 
     predict_dir = os.path.join(config.output_path, "images")
-    log_path = os.path.join(config.output_path, "eval.txt")
+    log_path = os.path.join(config.output_path, "eval.json")
     category = config.category
     num_cls = len(category)
 
@@ -272,5 +256,5 @@ if __name__ == "__main__":
     )
     log.update({"foreground(sort by t)": metrics})
 
-    writelog(log_path, log, config.comment)
+    json.dump(log, open(log_path, "w"), indent=4)
     print("done")
