@@ -4,9 +4,9 @@ import sys
 from typing import Dict
 
 import numpy as np
-import PIL.Image
 import torch
 from omegaconf import DictConfig
+from PIL import Image
 from torch.utils.data import Dataset
 
 
@@ -49,7 +49,7 @@ class VOC12Dataset(Dataset):
 
     def __getitem__(self, idx):
         name = self.img_name_list[idx]
-        img = PIL.Image.open(
+        img = Image.open(
             os.path.join(self.voc12_root, "JPEGImages", name + ".jpg")
         ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
@@ -75,7 +75,7 @@ class VOC10Dataset(Dataset):
 
     def __getitem__(self, idx):
         name = self.img_name_list[idx]
-        img = PIL.Image.open(
+        img = Image.open(
             os.path.join(self.voc10_root, "JPEGImages", name + ".jpg")
         ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
@@ -102,11 +102,11 @@ class COCOClsDataset(Dataset):
     def __getitem__(self, idx):
         name = self.img_name_list[idx]
         if self.train:
-            img = PIL.Image.open(
+            img = Image.open(
                 os.path.join(self.coco_root, "images/train2014", name + ".jpg")
             ).convert("RGB")
         else:
-            img = PIL.Image.open(
+            img = Image.open(
                 os.path.join(self.coco_root, "images/val2014", name + ".jpg")
             ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])

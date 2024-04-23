@@ -200,7 +200,7 @@ def aggregate_cross_att(
     cross_weight_sum = sum(config.cross_weight)
     for idx, att in enumerate(cross_atts):
         res = round(sqrt(att.shape[0]))
-        att = att.reshape(res, res).unsqueeze(0).unsqueeze(0)
+        att = att.reshape(1, 1, res, res)
         att = F.interpolate(att, size=(64, 64), mode="bilinear")
         cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
 

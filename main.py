@@ -138,7 +138,7 @@ if __name__ == "__main__":
                 att_map = torch.matmul(self_64, att_map)
 
             # 4. save attention map as mask
-            mask = att_map.view(64, 64).unsqueeze(0).unsqueeze(0)
+            mask = att_map.view(1, 1, 64, 64)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze(0).repeat(3, 1, 1).permute(1, 2, 0).cpu().numpy()

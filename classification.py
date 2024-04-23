@@ -97,7 +97,6 @@ if __name__ == "__main__":
 
     # generate multi-label classification results
     predict = defaultdict(dict)
-    aux_data = defaultdict(dict)
     text_prompts = ["", "A picture of"]
 
     image_classification_bar = tqdm.tqdm(dataset_train)
@@ -161,7 +160,7 @@ if __name__ == "__main__":
                 return_tensors="pt",
             )
             tmp_features = clip_text_model(noun_input.input_ids.to(clip_device))[0]
-            noun_features = torch.zeros(768).unsqueeze(0).to(clip_device)
+            noun_features = torch.zeros((1, 768)).to(clip_device)
             for i in range(0, tmp_features.shape[0]):
                 noun_features = torch.cat(
                     [

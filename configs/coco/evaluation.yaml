@@ -2,12 +2,11 @@
 dataset: "coco"
 
 # evaluation settings
-comment: "coco train" # 本次评估的注释，该注释会记录到日志文件中。
-start: 30 # 评估的起始阈值。
-end: 70 # 评估的结束阈值。
 data_root: "./COCO2014" # Ground Truth的数据目录。
 data_name_list: "./data/coco/train_id.txt" # 给出Ground Truth文件名列表的文件的路径。
 output_path: "./output/segmentation/coco" # 进行评估的根目录（存放预测结果、日志文件等）。
+start: 30 # 评估的起始阈值。
+end: 70 # 评估的结束阈值。
 bucket_num: 10 # 数据分块的数量，日志文件会保存每个块的评估结果。
 
 # dataset metainfo
