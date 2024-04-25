@@ -3,6 +3,7 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
+from collections import defaultdict
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
@@ -13,6 +14,7 @@ from tqdm import tqdm
 
 category = []
 num_cls = 0
+config = None
 
 
 def load_predict_and_gt(
@@ -22,12 +24,10 @@ def load_predict_and_gt(
     image_statistics = []
 
     # 将图像ID映射到由该图像预测出的类别名称
-    idx_to_cls = {}
+    idx_to_cls = defaultdict(list)
     for predict_file in os.listdir(predict_folder):
         idx = int(predict_file.split("_")[0])
         cls = predict_file.split("_")[1].split(".")[0]
-        if idx not in idx_to_cls:
-            idx_to_cls[idx] = []
         idx_to_cls[idx].append(cls)
 
     # gt的文件名列表
@@ -37,8 +37,11 @@ def load_predict_and_gt(
     # 按照name_list顺序处理每张图像
     for idx in tqdm(range(len(name_list)), desc="get image statistics..."):
         name = name_list[idx]
-        gt_file = os.path.join(gt_folder, "%s.png" % name)
-        gt = np.array(Image.open(gt_file))
+        if config.dataset == "coco":
+            gt_path = os.path.join(gt_folder, f"{int(name[-12:])}.png")
+        else:
+            gt_path = os.path.join(gt_folder, f"{name}.png")
+        gt = np.array(Image.open(gt_path))
         h, w = gt.shape
         predict = np.zeros((num_cls, h, w), np.float32)
 
