@@ -94,10 +94,11 @@ def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tup
 
         # image meta info
         h, w = gt.shape
-        # in VOC series dataset, gt < 255 is the valid region
+        # we follow MCTFormer (CVPR 2022) to prepare VOCaug dataset annotations.
+        # so we only use valid region to compute metrics in VOCaug dataset.
         # related code: https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py#L40
         cal = True
-        if config.dataset in ["voc", "context"]:
+        if config.dataset == "voc":
             cal = gt < 255
 
         # compute predicted background region by threshold
@@ -229,9 +230,9 @@ if __name__ == "__main__":
     best_metrics = None
     best_instance_statistics = None
 
-    threshold_bar = tqdm(range(config.start, config.end))
-    threshold_bar.initial = config.start
-    threshold_bar.total = config.end
+    threshold_bar = tqdm(
+        range(config.start, config.end), initial=config.start, total=config.end
+    )
     threshold_bar.set_description("applying threshold...")
     for i in threshold_bar:
         # current threshold value

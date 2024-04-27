@@ -15,39 +15,41 @@ python -m spacy download en_core_web_sm
 
 ### Data Preparation
 
-We use [mmsegmentation](https://github.com/open-mmlab/mmsegmentation) to prepare the data. Specifically, we follow this [guideline](https://github.com/open-mmlab/mmsegmentation/blob/main/docs/en/user_guides/2_dataset_prepare.md) to prepare PASCAL VOC (including VOCaug), PASCAL Context and COCO Stuff 164k datasets.
+1. We mainly used [mmsegmentation](https://github.com/open-mmlab/mmsegmentation) to prepare the data. Specifically, we followed this [guideline](https://github.com/open-mmlab/mmsegmentation/blob/main/docs/en/user_guides/2_dataset_prepare.md) to prepare PASCAL VOC (including VOCaug), PASCAL Context and COCO Stuff 164k datasets.
 
-After preparing these datasets, please link them to the project folder. The overall file structure is as follows:
-```
-ddsseg
-├── configs
-├── data
-├── utils
-├── README.md
-├── ...
-├── VOCdevkit
-│   ├── VOC2012
-│   │   ├── JPEGImages
-│   │   ├── SegmentationClassAug
-│   │   ├── ImageSets
-│   │   │   ├── Segmentation
-│   ├── VOC2010
-│   │   ├── JPEGImages
-│   │   ├── SegmentationClassContext
-│   │   ├── ImageSets
-│   │   │   ├── SegmentationContext
-│   │   │   │   ├── train.txt
-│   │   │   │   ├── val.txt
-│   ├── VOCaug
-│   │   ├── dataset
-├── coco_stuff164k
-│   ├── images
-│   │   ├── train2017
-│   │   ├── val2017
-│   ├── annotations
-│   │   ├── train2017
-│   │   ├── val2017
-```
+2. After preparing these datasets, please link them to the project folder. The overall file structure is as follows:
+    ```
+    ddsseg
+    ├── configs
+    ├── data
+    ├── utils
+    ├── README.md
+    ├── ...
+    ├── VOCdevkit
+    │   ├── VOC2012
+    │   │   ├── JPEGImages
+    │   │   ├── SegmentationClassAug
+    │   │   ├── ImageSets
+    │   │   │   ├── Segmentation
+    │   ├── VOC2010
+    │   │   ├── JPEGImages
+    │   │   ├── SegmentationClassContext
+    │   │   ├── ImageSets
+    │   │   │   ├── SegmentationContext
+    │   │   │   │   ├── train.txt
+    │   │   │   │   ├── val.txt
+    │   ├── VOCaug
+    │   │   ├── dataset
+    ├── coco_stuff164k
+    │   ├── images
+    │   │   ├── train2017
+    │   │   ├── val2017
+    │   ├── annotations
+    │   │   ├── train2017
+    │   │   ├── val2017
+    ```
+
+3. Finally, download [SBD dataset](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=6126343&casa_token=cOQGLW2KWqUAAAAA:Z-QHpQPf8Pnb07A75yBm2muYjqJwYUYPFbwwxMFHRcjRX0zl45kEGNqyTEPH7irB2QbabZbn&tag=1) annotations via this [link](https://www.dropbox.com/s/oeu149j8qtbs1x0/SegmentationClassAug.zip?dl=0). After downloading, replace `./VOCdevkit/VOC2012/SegmentationClassAug` with the downloaded folder. This step makes sure the evaluation is consistent with [MCTFormer](https://github.com/xulianuwa/MCTformer).
 
 > Note:
 > 1. `./data/voc/cls_labels.npy` is copied from [MCTFormer](https://github.com/xulianuwa/MCTformer).
@@ -55,6 +57,7 @@ ddsseg
 > 3. `**/cls_labels.npy` have the same format(have been carefully checked).
 > 4. `./data/*/val_id.txt` all keep the same with validation set of original datasets(have been carefully checked).
 > 5. if you have trouble downloading VOCaug dataset, please refer to [this PR](https://github.com/open-mmlab/mmsegmentation/pull/3654) to mmsegmentation.
+> 6. the SBD dataset download link is from [MCTFormer](https://github.com/xulianuwa/MCTformer) README.
 
 ## Usage
 
