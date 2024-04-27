@@ -25,7 +25,7 @@ def load_image_label_list_from_npy(img_name_list, label_file_path):
 
     for id in img_name_list:
         if id not in cls_labels_dict.keys():
-            img_name = id + ".jpg"
+            img_name = f"{id}.jpg"
         else:
             img_name = id
         label_list.append(cls_labels_dict[img_name])
@@ -50,7 +50,7 @@ class VOC12Dataset(Dataset):
     def __getitem__(self, idx):
         name = self.img_name_list[idx]
         img = Image.open(
-            os.path.join(self.voc12_root, "JPEGImages", name + ".jpg")
+            os.path.join(self.voc12_root, "JPEGImages", f"{name}.jpg")
         ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
         return img, label, name
@@ -76,7 +76,7 @@ class VOCContextDataset(Dataset):
     def __getitem__(self, idx):
         name = self.img_name_list[idx]
         img = Image.open(
-            os.path.join(self.voc10_root, "JPEGImages", name + ".jpg")
+            os.path.join(self.voc10_root, "JPEGImages", f"{name}.jpg")
         ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
         return img, label, name
@@ -103,11 +103,11 @@ class COCOClsDataset(Dataset):
         name = self.img_name_list[idx]
         if self.train:
             img = Image.open(
-                os.path.join(self.coco_root, "images/train2017", name + ".jpg")
+                os.path.join(self.coco_root, "images", "train2017", f"{name}.jpg")
             ).convert("RGB")
         else:
             img = Image.open(
-                os.path.join(self.coco_root, "images/val2017", name + ".jpg")
+                os.path.join(self.coco_root, "images", "val2017", f"{name}.jpg")
             ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
 
@@ -127,9 +127,9 @@ def build_dataset(config: DictConfig) -> Dataset:
         sys.exit("Label file not found")
     # construct dataset
     name_to_cls: Dict[str, Dataset] = {
-        "voc12": VOC12Dataset,
+        "voc": VOC12Dataset,
         "coco": COCOClsDataset,
-        "voc10": VOCContextDataset,
+        "context": VOCContextDataset,
     }
     if config.dataset not in name_to_cls:
         sys.exit("Dataset not supported")

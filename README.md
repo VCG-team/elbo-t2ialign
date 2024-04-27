@@ -4,11 +4,13 @@
 
 ### Python Environment
 
-A suitable [conda](https://conda.io/) environment named `ddsseg` can be created and activated with:
+A suitable [conda](https://conda.io/) environment named `ddsseg` can be created and setup with:
 
 ```bash
 conda env create -f environment.yaml
 conda activate ddsseg
+# download spacy model for classification
+python -m spacy download en_core_web_sm
 ```
 
 ### Data Preparation
