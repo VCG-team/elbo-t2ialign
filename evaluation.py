@@ -217,7 +217,8 @@ if __name__ == "__main__":
         sys.exit("Start threshold should be less than end")
 
     predict_dir = os.path.join(config.output_path, "images")
-    category = list(config.category.keys()).insert(0, "background")
+    category = list(config.category.keys())
+    category.insert(0, "background")
     num_cls = len(category)
 
     image_statistics = load_predict_and_gt(
