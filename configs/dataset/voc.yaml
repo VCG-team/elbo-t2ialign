@@ -8,67 +8,68 @@ name_to_cls_labels: "./data/voc/cls_labels.npy"
 # related code: https://github.com/open-mmlab/mmsegmentation/blob/main/mmseg/datasets/voc.py
 num_cls: 20 # not including background
 category:
-  plane: ["plane", "jet", "airplane", "jetliner", "shuttle", "aeroplane"]
-  bicycle: ["bicycle", "bike"]
+  plane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
+  bicycle: ["bike", "bicycle"]
   bird:
     [
+      "ostrich",
+      "duck",
+      "peacock",
       "bird",
       "seagull",
-      "parrot",
-      "owl",
-      "pigeon",
-      "flamingo",
-      "emu",
       "penguin",
-      "duck",
-      "eagle",
-      "ostrich",
-      "chicken",
-      "peacock",
-      "pelican",
       "swan",
+      "owl",
+      "flamingo",
+      "eagle",
+      "pelican",
+      "emu",
+      "pigeon",
+      "chicken",
+      "parrot",
     ]
-  boat: ["boat", "sailboat", "ship", "kayak", "canoe"]
+  boat: ["ship", "kayak", "boat", "canoe", "sailboat"]
   bottle: ["bottle", "drink"]
-  buses: ["bus", "tram"]
-  car: ["car", "suv", "wheel", "truck", "jeep", "cooper", "taxi", "cab"]
-  cat: ["cat", "kitten", "lynx"]
-  chair: ["chair", "stool"]
-  cow: ["cow", "bull", "bison", "cattle"]
-  table: ["table", "desk", "diningtable", "dining table"]
-  dog: ["dog", "dachshund", "puppy", "pug"]
-  horse: ["horse", "pony"]
+  buses: ["buses", "bus", "tram"]
+  car: ["cab", "taxi", "jeep", "cooper", "truck", "car", "wheel", "suv"]
+  cat: ["lynx", "kitten", "cat"]
+  chair: ["stool", "chair"]
+  cow: ["bison", "cattle", "bull", "cow"]
+  table: ["dining table", "desk", "table", "diningtable"]
+  dog: ["dog", "puppy", "dachshund", "pug"]
+  horse: ["pony", "horse"]
   motorbike: ["motorbike", "scooter"]
   people:
     [
-      "person",
       "they",
       "he",
-      "she",
-      "him",
-      "her",
-      "man",
-      "woman",
-      "child",
-      "baby",
       "skateboarder",
-      "speaker",
-      "boy",
-      "girl",
-      "bride",
-      "groom",
-      "parent",
       "couple",
+      "woman",
       "player",
+      "she",
       "wrestler",
-      "chef",
+      "man",
+      "him",
       "skier",
+      "her",
+      "chef",
+      "girl",
+      "boy",
+      "parent",
+      "person",
+      "baby",
+      "child",
+      "groom",
+      "bride",
+      "people",
+      "speaker",
     ]
-  plant: ["plant", "pottedplant", "flower", "potted plant"]
-  sheep: ["sheep", "lamb", "goat"]
-  sofa: ["sofa", "couch"]
+  plant: ["potted plant", "pottedplant", "plant", "flower"]
+  sheep: ["lamb", "goat", "sheep"]
+  sofa: ["couch", "sofa"]
   train: ["train"]
-  monitor: ["monitor", "screen", "television", "tv", "tvmonitor"]
+  monitor: ["television", "tvmonitor", "screen", "tv", "monitor"]
 bg_category:
   [
     "ground",

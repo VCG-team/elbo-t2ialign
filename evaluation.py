@@ -63,7 +63,16 @@ def load_predict_and_gt(
         for cls in idx_to_cls[idx]:
             predict_file = os.path.join(predict_folder, f"{idx}_{cls}.png")
             predict_cls = np.array(Image.open(predict_file), dtype=np.float32) / 255
-            cls_idx = category.index(cls)
+
+            # search for cls_idx
+            cls_idx = 1
+            for cls_name in config.category:
+                if cls == str(cls_name) or cls in config.category[cls_name]:
+                    break
+                cls_idx += 1
+            if cls_idx == num_cls:
+                sys.exit(f"Unknown class: {cls}")
+
             predict[cls_idx] = predict_cls
 
         # merge all cls predict to get the final predict

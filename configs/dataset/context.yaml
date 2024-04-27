@@ -8,7 +8,7 @@ name_to_cls_labels: "./data/context/cls_labels.npy"
 # related code: https://github.com/open-mmlab/mmsegmentation/blob/main/mmseg/datasets/pascal_context.py
 num_cls: 59 # not including background
 category:
-  airplane: ["airplane", "plane", "aeroplane", "jet", "jetliner", "shuttle"]
+  airplane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
   bag: ["bag"]
   bed: ["bed"]
   bedclothes: ["bedclothes"]
@@ -16,39 +16,39 @@ category:
   bicycle: ["bicycle"]
   bird:
     [
-      "bird",
-      "rooster",
       "hummingbird",
-      "seagull",
-      "parrot",
-      "owl",
-      "pigeon",
-      "flamingo",
-      "emu",
-      "penguin",
-      "duck",
-      "eagle",
       "ostrich",
+      "duck",
       "peacock",
+      "bird",
+      "seagull",
+      "penguin",
+      "owl",
+      "rooster",
+      "flamingo",
+      "eagle",
       "pelican",
+      "emu",
+      "pigeon",
       "chicken",
+      "parrot",
     ]
-  boat: ["boat", "sailboat", "ship", "kayak", "canoe"]
+  boat: ["ship", "kayak", "boat", "canoe", "sailboat"]
   book: ["book"]
   bottle: ["bottle"]
   building: ["building"]
   bus: ["bus", "tram"]
   cabinet: ["cabinet"]
-  car: ["car", "van", "jeep", "suv", "chrysler", "cooper", "taxi", "cab"]
-  cat: ["cat", "kitten", "lynx"]
+  car: ["cab", "taxi", "van", "jeep", "cooper", "chrysler", "car", "suv"]
+  cat: ["lynx", "kitten", "cat"]
   ceiling: ["ceiling"]
-  chair: ["chair", "stool"]
+  chair: ["stool", "chair"]
   cloth: ["cloth"]
   computer: ["computer"]
-  cow: ["cow", "bull", "bison", "cattle"]
+  cow: ["bison", "cattle", "bull", "cow"]
   cup: ["cup"]
   curtain: ["curtain"]
-  dog: ["dog", "dachshund", "puppy", "pug"]
+  dog: ["dog", "puppy", "dachshund", "pug"]
   door: ["door"]
   fence: ["fence"]
   floor: ["floor"]
@@ -56,44 +56,44 @@ category:
   food: ["food", "pizza", "pepperoni"]
   grass: ["grass"]
   ground: ["ground"]
-  horse: ["horse", "pony"]
+  horse: ["pony", "horse"]
   keyboard: ["keyboard"]
   light: ["light"]
-  motorbike: ["motorbike", "scooter", "moped"]
+  motorbike: ["motorbike", "moped", "scooter"]
   mountain: ["mountain"]
   mouse: ["mouse"]
   person:
     [
-      "person",
-      "people",
       "they",
       "he",
-      "she",
-      "him",
-      "her",
-      "man",
-      "woman",
-      "child",
-      "baby",
       "skateboarder",
-      "speaker",
-      "boy",
-      "girl",
-      "bride",
-      "groom",
-      "parent",
       "couple",
+      "woman",
       "player",
+      "she",
       "wrestler",
-      "chef",
+      "man",
+      "him",
       "skier",
+      "her",
+      "chef",
+      "girl",
+      "boy",
+      "parent",
+      "person",
+      "baby",
+      "child",
+      "groom",
+      "people",
+      "bride",
+      "speaker",
     ]
   plate: ["plate"]
   platform: ["platform"]
-  plant: ["plant", "pottedplant", "potted plant"]
+  plant: ["potted plant", "pottedplant", "plant"]
   road: ["road"]
   rock: ["rock"]
-  sheep: ["sheep", "lamb", "goat"]
+  sheep: ["lamb", "goat", "sheep"]
   shelves: ["shelves"]
   sidewalk: ["sidewalk"]
   sign: ["sign"]
@@ -105,7 +105,7 @@ category:
   train: ["train"]
   tree: ["tree"]
   truck: ["truck"]
-  monitor: ["monitor", "screen", "tvmonitor", "television", "tv"]
+  monitor: ["television", "tvmonitor", "screen", "tv", "monitor"]
   wall: ["wall"]
   water: ["water"]
   window: ["window"]

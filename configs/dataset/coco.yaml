@@ -13,69 +13,69 @@ num_cls: 80 # not including background
 category:
   person:
     [
-      "person",
       "they",
       "he",
-      "she",
-      "him",
-      "her",
-      "man",
-      "woman",
-      "child",
-      "baby",
       "skateboarder",
-      "speaker",
-      "boy",
-      "girl",
-      "bride",
-      "groom",
-      "parent",
       "couple",
-      "people",
-      "player",
-      "wrestler",
+      "woman",
       "snowboarder",
-      "chef",
+      "player",
+      "she",
+      "wrestler",
+      "man",
+      "him",
       "skier",
+      "her",
+      "chef",
+      "girl",
+      "boy",
+      "parent",
+      "person",
+      "baby",
+      "child",
+      "groom",
+      "bride",
+      "people",
+      "speaker",
     ]
   bicycle: ["bicycle"]
-  car: ["car", "jeep", "suv", "chrysler", "cooper", "van", "taxi", "cab"]
-  motorbike: ["motorbike", "scooter", "moped", "motorcycle"]
-  aeroplane: ["aeroplane", "plane", "airplane", "jet", "jetliner", "shuttle"]
+  car: ["cab", "taxi", "van", "jeep", "cooper", "chrysler", "car", "suv"]
+  motorbike: ["motorbike", "motorcycle", "moped", "scooter"]
+  aeroplane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
   bus: ["bus", "tram"]
   train: ["train"]
   truck: ["truck", "van"]
-  boat: ["boat", "sailboat", "ship", "kayak", "canoe"]
-  traffic light: ["traffic light", "stoplight"]
+  boat: ["ship", "kayak", "boat", "canoe", "sailboat"]
+  traffic light: ["stoplight", "traffic light"]
   fire hydrant: ["fire hydrant", "hydrant"]
   stop sign: ["stop sign"]
   parking meter: ["parking meter"]
   bench: ["bench"]
   bird:
     [
-      "bird",
-      "rooster",
       "hummingbird",
-      "seagull",
-      "parrot",
-      "owl",
-      "pigeon",
-      "flamingo",
-      "emu",
-      "penguin",
-      "duck",
-      "eagle",
       "ostrich",
+      "duck",
       "peacock",
-      "pelican",
+      "bird",
+      "seagull",
+      "penguin",
       "swan",
+      "owl",
+      "rooster",
+      "flamingo",
+      "eagle",
+      "pelican",
+      "emu",
+      "pigeon",
       "chicken",
+      "parrot",
     ]
-  cat: ["cat", "kitten", "lynx"]
-  dog: ["dog", "dachshund", "puppy", "pug"]
-  horse: ["horse", "pony"]
-  sheep: ["sheep", "lamb", "goat"]
-  cow: ["cow", "bull", "bison", "cattle"]
+  cat: ["lynx", "kitten", "cat"]
+  dog: ["dog", "puppy", "dachshund", "pug"]
+  horse: ["pony", "horse"]
+  sheep: ["lamb", "goat", "sheep"]
+  cow: ["bison", "cattle", "bull", "cow"]
   elephant: ["elephant"]
   bear: ["bear"]
   zebra: ["zebra"]
@@ -105,27 +105,27 @@ category:
   banana: ["banana"]
   apple: ["apple"]
   sandwich: ["sandwich"]
-  orange: ["orange", "orange"]
+  orange: ["orange"]
   broccoli: ["broccoli"]
   carrot: ["carrot"]
   hot dog: ["hot dog"]
   pizza: ["pizza"]
   donut: ["donut"]
   cake: ["cake"]
-  chair: ["chair", "stool"]
-  sofa: ["sofa", "couch"]
+  chair: ["stool", "chair"]
+  sofa: ["couch", "sofa"]
   pottedplant: ["pottedplant", "potted plant"]
   bed: ["bed"]
-  diningtable: ["diningtable", "dining table"]
-  toilet: ["toilet", "restroom"]
-  tvmonitor: ["tvmonitor", "television", "tv", "monitor"]
+  diningtable: ["dining table", "diningtable"]
+  toilet: ["restroom", "toilet"]
+  tvmonitor: ["tv", "television", "tvmonitor", "monitor"]
   laptop: ["laptop"]
   mouse: ["mouse"]
   remote: ["remote", "control"]
   keyboard: ["keyboard"]
   cell phone: ["cell phone", "phone"]
   microwave: ["microwave"]
-  oven: ["oven", "stove"]
+  oven: ["stove", "oven"]
   toaster: ["toaster"]
   sink: ["sink"]
   refrigerator: ["refrigerator"]
