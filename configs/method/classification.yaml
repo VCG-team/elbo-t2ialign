@@ -1,0 +1,6 @@
+# classification process settings (classification.py)
+enable_text_similarity: True
+enable_text_and_image_similarity: True
+enable_synonym_matching: True
+text_threshold: 0.8
+text_and_image_threshold: 0.97

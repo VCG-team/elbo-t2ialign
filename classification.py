@@ -1,5 +1,6 @@
 import os
 import warnings
+from argparse import ArgumentParser
 from collections import defaultdict
 
 import numpy as np
@@ -37,19 +38,34 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    config_path = "./configs/voc12/classification.yaml"
-    config = OmegaConf.load(config_path)
+    parser = ArgumentParser()
+    parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
+    parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
+    parser.add_argument(
+        "--method-cfg", type=str, default="./configs/method/classification.yaml"
+    )
+    args, unknown = parser.parse_known_args()
+
+    dataset_cfg = OmegaConf.load(args.dataset_cfg)
+    io_cfg = OmegaConf.load(args.io_cfg)
+    method_cfg = OmegaConf.load(args.method_cfg)
+    cli_cfg = OmegaConf.from_dotlist(unknown)
+
+    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg, cli_cfg)
+    config.output_path = config.output_path[config.dataset]
+    os.makedirs(config.output_path, exist_ok=True)
+    OmegaConf.save(config, os.path.join(config.output_path, "classification.yaml"))
 
     # load model
-    clip_device = config.clip_device
-    clip_tokenizer = CLIPTokenizer.from_pretrained(config.clip_path)
-    clip_image_processor = CLIPImageProcessor.from_pretrained(config.clip_path)
-    clip_model = CLIPModel.from_pretrained(config.clip_path).to(clip_device)
+    clip_device = config.clip.device
+    clip_tokenizer = CLIPTokenizer.from_pretrained(config.clip.path)
+    clip_image_processor = CLIPImageProcessor.from_pretrained(config.clip.path)
+    clip_model = CLIPModel.from_pretrained(config.clip.path).to(clip_device)
     clip_text_model = clip_model.text_model
 
-    blip_device = config.blip_device
-    blip_processor = BlipProcessor.from_pretrained(config.blip_path)
-    blip_model = BlipForConditionalGeneration.from_pretrained(config.blip_path).to(
+    blip_device = config.blip.device
+    blip_processor = BlipProcessor.from_pretrained(config.blip.path)
+    blip_model = BlipForConditionalGeneration.from_pretrained(config.blip.path).to(
         blip_device
     )
 
@@ -57,7 +73,7 @@ if __name__ == "__main__":
     dataset_train = build_dataset(config)
 
     # load labels and synonym for different dataset
-    labels_synonym = config.labels_synonym
+    labels_synonym = config.category
     labels = list(labels_synonym.keys())
     num_cls = len(labels)
 
@@ -186,5 +202,5 @@ if __name__ == "__main__":
         predict[name] = tmp_pre_onehot
 
     os.makedirs(config.output_path, exist_ok=True)
-    output_path = os.path.join(config.output_path, "predict_cls.npy")
+    output_path = os.path.join(config.output_path, "cls_predict.npy")
     np.save(output_path, predict, allow_pickle=True)

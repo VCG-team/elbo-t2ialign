@@ -225,7 +225,7 @@ def image_optimization(
     text_target: str,
     config: DictConfig,
 ) -> None:
-    device = torch.device(config.device)
+    device = torch.device(config.diffusion.device)
     dds_loss = DDSLoss(device, pipeline)
     dds_loss.alpha_exp = config.alpha_exp
     dds_loss.sigma_exp = config.sigma_exp

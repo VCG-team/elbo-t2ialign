@@ -18,93 +18,109 @@ config = None
 
 
 def load_predict_and_gt(
-    predict_folder: str, gt_folder: str, gt_list: str
+    predict_folder: str, data_root: str, gt_list: str
 ) -> List[Tuple]:
-    # 用于存放图像的信息
+    # store image level statistics
     image_statistics = []
 
-    # 将图像ID映射到由该图像预测出的类别名称
+    # convert img idx to the predicted cls names
     idx_to_cls = defaultdict(list)
     for predict_file in os.listdir(predict_folder):
         idx = int(predict_file.split("_")[0])
         cls = predict_file.split("_")[1].split(".")[0]
         idx_to_cls[idx].append(cls)
 
-    # gt的文件名列表
+    # ground truth filename list
     df = pd.read_csv(gt_list, names=["filename"])
     name_list = df["filename"].values
 
-    # 按照name_list顺序处理每张图像
+    # load each image gt and predict in name_list order
     for idx in tqdm(range(len(name_list)), desc="get image statistics..."):
+        # 1. load gt
         name = name_list[idx]
         if config.dataset == "coco":
-            gt_path = os.path.join(gt_folder, f"{int(name[-12:])}.png")
+            gt_path = os.path.join(
+                data_root, "annotations", "val2017", f"{name}_labelTrainIds.png"
+            )
+        elif config.dataset == "voc":
+            gt_path = os.path.join(data_root, "SegmentationClassAug", f"{name}.png")
+        elif config.dataset == "context":
+            gt_path = os.path.join(data_root, "SegmentationClassContext", f"{name}.png")
         else:
-            gt_path = os.path.join(gt_folder, f"{name}.png")
+            sys.exit("Unknown dataset")
         gt = np.array(Image.open(gt_path))
+        # follow GroupViT (CVPR 2022), we only use first 80 classes in COCO, set other classes to background
+        # related code: https://github.com/NVlabs/GroupViT/blob/main/convert_dataset/convert_coco_object.py
+        if config.dataset == "coco":
+            gt = gt + 1
+            gt[gt > 80] = 0
+
+        # 2. load predict
         h, w = gt.shape
         predict = np.zeros((num_cls, h, w), np.float32)
 
-        # 获取该图像预测出的每个类别的预测结果
+        # get all cls predict in this image
         for cls in idx_to_cls[idx]:
             predict_file = os.path.join(predict_folder, f"{idx}_{cls}.png")
-            predict_cls = (
-                np.array(Image.open(predict_file), dtype=np.float32)[:, :, 0] / 255
-            )
+            predict_cls = np.array(Image.open(predict_file), dtype=np.float32) / 255
             cls_idx = category.index(cls)
             predict[cls_idx] = predict_cls
 
-        # 将不同类别的预测结果合并，得到最终的预测结果
+        # merge all cls predict to get the final predict
         predict_value = np.max(predict, axis=0)
         predict = np.argmax(predict, axis=0).astype(np.uint8)
-        cal = gt < 255
 
-        image_statistics.append((predict, predict_value, gt, cal, h, w, idx))
+        # 3. save image level statistics
+        image_statistics.append((gt, predict_value, predict, idx))
 
     return image_statistics
 
 
-def apply_threshold(
-    image_statistics: List[Tuple], threshold: float = 0.5
-) -> Dict[str, Dict]:
-    # 用于存放实例的信息
+def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tuple]:
+    # store instance level statistics, notice one image has multiple instances
     instance_statistics = []
 
-    # 按照image_statistics顺序处理每张图像
-    for predict, predict_value, gt, cal, h, w, img_idx in image_statistics:
+    # process each image in image_statistics order
+    for gt, predict_value, predict, img_idx in image_statistics:
 
-        # 根据阈值给出图像预测结果中的背景部分
+        # image meta info
+        h, w = gt.shape
+        # in VOC series dataset, gt < 255 is the valid region
+        # related code: https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py#L40
+        cal = True
+        if config.dataset in ["voc", "context"]:
+            cal = gt < 255
+
+        # compute predicted background region by threshold
         background = predict_value < threshold
         predict_copy = predict.copy()
         predict_copy[background] = 0
 
-        # 将图像级别的预测结果重新整理成实例级别的预测结果
+        # get instance level statistics for each class
         for cls_idx in range(num_cls):
 
-            p_i = (predict_copy == cls_idx) * cal
-            t_i = gt == cls_idx
-            sum_p_i = np.sum(p_i)
-            sum_t_i = np.sum(t_i)
+            p = (predict_copy == cls_idx) * cal
+            t = gt == cls_idx
+            sum_p = np.sum(p)
+            sum_t = np.sum(t)
 
-            if sum_t_i == 0 and sum_p_i == 0:
+            if sum_t == 0 and sum_p == 0:
                 continue
 
-            sum_tp_i = np.sum(t_i * p_i)
+            sum_tp = np.sum(t * p)
 
-            instance_statistics.append(
-                (sum_p_i, sum_t_i, sum_tp_i, h, w, cls_idx, img_idx)
-            )
+            instance_statistics.append((sum_p, sum_t, sum_tp, h, w, cls_idx, img_idx))
 
     return instance_statistics
 
 
 def apply_metrics(
-    instance_statistics,
+    instance_statistics: List[Tuple],
     filter_fn: Callable = None,
     sort_fn: Callable = None,
     bucket_num: int = 1,
-):
-    # 最终返回的评估指标信息
+) -> Dict[str, List]:
+    # evaluation metrices for each data bucket
     metrics = {
         "m_IoU": [],
         "m_TP_T": [],
@@ -113,7 +129,7 @@ def apply_metrics(
         "m_FN": [],
     }
 
-    # 数据的筛选和排序
+    # filter and sort instance_statistics
     if filter_fn is not None:
         instance_statistics = list(filter(filter_fn, instance_statistics))
         metrics.update({"count": len(instance_statistics)})
@@ -121,9 +137,10 @@ def apply_metrics(
         instance_statistics.sort(key=sort_fn)
         metrics.update({"boundary": []})
 
-    # 将实例级别的预测结果分成bucket_num个块
+    # divide instance_statistics into bucket_num parts
     bucket_size = len(instance_statistics) // bucket_num + 1
 
+    # compute metrics for each bucket
     for b_idx in range(bucket_num):
         # 第b_idx个数据块的起点和终点
         start = b_idx * bucket_size
@@ -135,18 +152,10 @@ def apply_metrics(
         TP = np.zeros(num_cls, dtype=np.int64)
         cls_cnt = np.zeros(num_cls, dtype=np.int32)
 
-        for (
-            sum_p_i,
-            sum_t_i,
-            sum_tp_i,
-            height,
-            width,
-            cls_idx,
-            img_idx,
-        ) in instance_statistics[start:end]:
-            P[cls_idx] += sum_p_i
-            T[cls_idx] += sum_t_i
-            TP[cls_idx] += sum_tp_i
+        for sum_p, sum_t, sum_tp, _, _, cls_idx, _ in instance_statistics[start:end]:
+            P[cls_idx] += sum_p
+            T[cls_idx] += sum_t
+            TP[cls_idx] += sum_tp
             cls_cnt[cls_idx] += 1
 
         valid_idx = cls_cnt > 0
@@ -178,39 +187,44 @@ def apply_metrics(
 if __name__ == "__main__":
 
     parser = ArgumentParser()
-    parser.add_argument("--config", type=str, default="./configs/voc12/evaluation.yaml")
+    parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
+    parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
+    parser.add_argument(
+        "--method-cfg", type=str, default="./configs/method/evaluation.yaml"
+    )
     args, unknown = parser.parse_known_args()
 
-    config = OmegaConf.load(args.config)
-    config.merge_with_dotlist(unknown)
+    dataset_cfg = OmegaConf.load(args.dataset_cfg)
+    io_cfg = OmegaConf.load(args.io_cfg)
+    method_cfg = OmegaConf.load(args.method_cfg)
+    cli_cfg = OmegaConf.from_dotlist(unknown)
+
+    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg, cli_cfg)
+    config.output_path = config.output_path[config.dataset]
+    os.makedirs(config.output_path, exist_ok=True)
+    OmegaConf.save(config, os.path.join(config.output_path, "evaluation.yaml"))
 
     if config.start >= config.end:
         sys.exit("Start threshold should be less than end")
 
-    if config.dataset == "voc12":
-        gt_dir = os.path.join(config.data_root, "SegmentationClassAug")
-    elif config.dataset == "coco":
-        gt_dir = os.path.join(config.data_root, "mask/train2014")
-    else:
-        sys.exit("Dataset not supported")
-
     predict_dir = os.path.join(config.output_path, "images")
-    log_path = os.path.join(config.output_path, "eval.json")
-    category = config.category
+    category = list(config.category.keys()).insert(0, "background")
     num_cls = len(category)
 
-    image_statistics = load_predict_and_gt(predict_dir, gt_dir, config.data_name_list)
+    image_statistics = load_predict_and_gt(
+        predict_dir, config.data_root, config.data_name_list
+    )
 
     best_threshold = 0
     best_metrics = None
     best_instance_statistics = None
 
-    threshold_bar = tqdm(
-        range(config.start, config.end), initial=config.start, total=config.end
-    )
+    threshold_bar = tqdm(range(config.start, config.end))
+    threshold_bar.initial = config.start
+    threshold_bar.total = config.end
     threshold_bar.set_description("applying threshold...")
     for i in threshold_bar:
-        # 当前的阈值t
+        # current threshold value
         t = i / 100.0
         # 使用阈值t计算mIoU，并记录下来
         instance_statistics = apply_threshold(image_statistics, threshold=t)
@@ -259,5 +273,7 @@ if __name__ == "__main__":
     )
     log.update({"foreground(sort by t)": metrics})
 
-    json.dump(log, open(log_path, "w"), indent=4)
+    with open(os.path.join(config.output_path, "evaluation.json"), "w") as f:
+        json.dump(log, f, indent=4)
+
     print("done")

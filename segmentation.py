@@ -23,15 +23,16 @@ from utils.ptp_utils import (
 )
 
 
-# fix random seed
+# fix random seed, modified from MCTFormer (CVPR 2022)
+# related code: https://github.com/xulianuwa/MCTformer/blob/main/main.py#L152
 def same_seeds(seed):
-    torch.manual_seed(seed)  # 固定随机种子（CPU）
-    if torch.cuda.is_available():  # 固定随机种子（GPU)
-        torch.cuda.manual_seed(seed)  # 为当前GPU设置
-        torch.cuda.manual_seed_all(seed)  # 为所有GPU设置
-    np.random.seed(seed)  # 保证后续使用random函数时，产生固定的随机数
-    torch.backends.cudnn.benchmark = False  # GPU、网络结构固定，可设置为True
-    torch.backends.cudnn.deterministic = True  # 固定网络结构
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
 
 if __name__ == "__main__":
@@ -39,31 +40,45 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore")
 
     parser = ArgumentParser()
-    parser.add_argument("--config", type=str, default="./configs/voc12/main.yaml")
+    parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
+    parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
+    parser.add_argument(
+        "--method-cfg", type=str, default="./configs/method/segmentation.yaml"
+    )
     args, unknown = parser.parse_known_args()
 
-    config = OmegaConf.load(args.config)
-    config.merge_with_dotlist(unknown)
+    dataset_cfg = OmegaConf.load(args.dataset_cfg)
+    io_cfg = OmegaConf.load(args.io_cfg)
+    method_cfg = OmegaConf.load(args.method_cfg)
+    cli_cfg = OmegaConf.from_dotlist(unknown)
 
-    device = torch.device(config.device)
-    same_seeds(config.seed)
-    dataset = build_dataset(config)
+    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg, cli_cfg)
+    config.output_path = config.output_path[config.dataset]
+    os.makedirs(config.output_path, exist_ok=True)
+    OmegaConf.save(config, os.path.join(config.output_path, "segmentation.yaml"))
+
     img_output_path = os.path.join(config.output_path, "images")
     os.makedirs(img_output_path, exist_ok=True)
-    OmegaConf.save(config, os.path.join(config.output_path, "config.yaml"))
+    diffusion_device = torch.device(config.diffusion.device)
+    blip_device = torch.device(config.blip.device)
+    same_seeds(config.seed)
+    dataset = build_dataset(config)
+    category = list(config.category.keys())
 
-    dtype = torch.float16 if config.dtype == "fp16" else torch.float32
+    diffusion_dtype = (
+        torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
+    )
     pipeline = StableDiffusionPipeline.from_pretrained(
-        config.diffusion_path, torch_dtype=dtype
-    ).to(device)
+        config.diffusion.path, torch_dtype=diffusion_dtype
+    ).to(diffusion_device)
 
     controller = AttentionStore()
     register_attention_control(pipeline, controller, config)
 
     if config.use_blip:
-        blip_processor = BlipProcessor.from_pretrained(config.blip_path)
-        blip_model = BlipForConditionalGeneration.from_pretrained(config.blip_path)
-        blip_model.to(device)
+        blip_processor = BlipProcessor.from_pretrained(config.blip.path)
+        blip_model = BlipForConditionalGeneration.from_pretrained(config.blip.path)
+        blip_model.to(blip_device)
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
@@ -79,7 +94,7 @@ if __name__ == "__main__":
         # generate mask for each label in the image·
         for i in range(y.shape[0]):
             # 1. prompts generation
-            cls_name = config.category[y[i].item()]
+            cls_name = category[y[i].item()]
             cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
             pos = [4 + i for i in range(cls_name_len)]
             text_source = f"a photograph of {cls_name}."
@@ -90,7 +105,7 @@ if __name__ == "__main__":
                     # blip inference
                     blip_inputs = blip_processor(
                         img, text_source[:-1], return_tensors="pt"
-                    ).to(device)
+                    ).to(blip_device)
                     blip_out = blip_model.generate(**blip_inputs)
                     blip_out_prompt = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
@@ -118,10 +133,6 @@ if __name__ == "__main__":
                         + "."
                     )
 
-            if config.print_prompt:
-                tqdm.write(f"image: {k}, source_text: {text_source}")
-                tqdm.write(f"image: {k}, target_text: {text_target}")
-
             # 2. dds loss optimization
             controller.reset()
             image_optimization(pipeline, img_512, text_source, text_target, config)
@@ -141,5 +152,5 @@ if __name__ == "__main__":
             mask = att_map.view(1, 1, 64, 64)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
-            mask = mask.squeeze(0).repeat(3, 1, 1).permute(1, 2, 0).cpu().numpy()
+            mask = mask.squeeze().cpu().numpy()
             cv2.imwrite(f"{img_output_path}/{k}_{cls_name}.png", mask)

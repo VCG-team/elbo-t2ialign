@@ -1,0 +1,22 @@
+name: ddsseg
+channels:
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.9.16
+  - pip=20.3
+  - pytorch=2.1.2
+  - pip:
+      - compel==2.0.2
+      - diffusers==0.27.2
+      - einops==0.7.0
+      - numpy==1.24.1
+      - omegaconf==2.3.0
+      - opencv-python==4.9.0.80
+      - pandas==2.2.0
+      - pillow==9.3.0
+      - pyarrow==15.0.2
+      - spacy==3.7.4
+      - tqdm==4.66.1
+      - transformers==4.36.2

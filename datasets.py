@@ -38,7 +38,7 @@ class VOC12Dataset(Dataset):
         self,
         img_name_list_path,
         voc12_root,
-        label_file_path="./data/voc12/cls_labels.npy",
+        label_file_path,
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -59,12 +59,12 @@ class VOC12Dataset(Dataset):
         return len(self.img_name_list)
 
 
-class VOC10Dataset(Dataset):
+class VOCContextDataset(Dataset):
     def __init__(
         self,
         img_name_list_path,
         voc10_root,
-        label_file_path="./data/voc10/cls_labels.npy",
+        label_file_path,
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -90,7 +90,7 @@ class COCOClsDataset(Dataset):
         self,
         img_name_list_path,
         coco_root,
-        label_file_path="./data/coco/cls_labels.npy",
+        label_file_path,
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -103,11 +103,11 @@ class COCOClsDataset(Dataset):
         name = self.img_name_list[idx]
         if self.train:
             img = Image.open(
-                os.path.join(self.coco_root, "images/train2014", name + ".jpg")
+                os.path.join(self.coco_root, "images/train2017", name + ".jpg")
             ).convert("RGB")
         else:
             img = Image.open(
-                os.path.join(self.coco_root, "images/val2014", name + ".jpg")
+                os.path.join(self.coco_root, "images/val2017", name + ".jpg")
             ).convert("RGB")
         label = torch.from_numpy(self.label_list[idx])
 
@@ -118,12 +118,20 @@ class COCOClsDataset(Dataset):
 
 
 def build_dataset(config: DictConfig) -> Dataset:
+    # check: use cls_predict.npy or cls_labels.npy
+    if config.use_cls_predict:
+        label_file_path = os.path.join(config.output_path, "cls_predict.npy")
+    else:
+        label_file_path = config.name_to_cls_labels
+    if not os.path.exists(label_file_path):
+        sys.exit("Label file not found")
+    # construct dataset
     name_to_cls: Dict[str, Dataset] = {
         "voc12": VOC12Dataset,
         "coco": COCOClsDataset,
-        "voc10": VOC10Dataset,
+        "voc10": VOCContextDataset,
     }
     if config.dataset not in name_to_cls:
         sys.exit("Dataset not supported")
     dataset_cls = name_to_cls[config.dataset]
-    return dataset_cls(config.data_name_list, config.data_root)
+    return dataset_cls(config.data_name_list, config.data_root, label_file_path)

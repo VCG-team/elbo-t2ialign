@@ -1,0 +1,99 @@
+# metainfo for voc dataset
+dataset: "voc"
+data_root: "./VOCdevkit/VOC2012"
+data_name_list: "./data/voc/val_id.txt"
+name_to_cls_labels: "./data/voc/cls_labels.npy"
+# we follow mmsegmentation to prepare dataset.
+# so categories in pascal voc dataset are the same with mmsegmentation.
+# related code: https://github.com/open-mmlab/mmsegmentation/blob/main/mmseg/datasets/voc.py
+num_cls: 20 # not including background
+category:
+  plane: ["plane", "jet", "airplane", "jetliner", "shuttle", "aeroplane"]
+  bicycle: ["bicycle", "bike"]
+  bird:
+    [
+      "bird",
+      "seagull",
+      "parrot",
+      "owl",
+      "pigeon",
+      "flamingo",
+      "emu",
+      "penguin",
+      "duck",
+      "eagle",
+      "ostrich",
+      "chicken",
+      "peacock",
+      "pelican",
+      "swan",
+    ]
+  boat: ["boat", "sailboat", "ship", "kayak", "canoe"]
+  bottle: ["bottle", "drink"]
+  buses: ["bus", "tram"]
+  car: ["car", "suv", "wheel", "truck", "jeep", "cooper", "taxi", "cab"]
+  cat: ["cat", "kitten", "lynx"]
+  chair: ["chair", "stool"]
+  cow: ["cow", "bull", "bison", "cattle"]
+  table: ["table", "desk", "diningtable", "dining table"]
+  dog: ["dog", "dachshund", "puppy", "pug"]
+  horse: ["horse", "pony"]
+  motorbike: ["motorbike", "scooter"]
+  people:
+    [
+      "person",
+      "they",
+      "he",
+      "she",
+      "him",
+      "her",
+      "man",
+      "woman",
+      "child",
+      "baby",
+      "skateboarder",
+      "speaker",
+      "boy",
+      "girl",
+      "bride",
+      "groom",
+      "parent",
+      "couple",
+      "player",
+      "wrestler",
+      "chef",
+      "skier",
+    ]
+  plant: ["plant", "pottedplant", "flower", "potted plant"]
+  sheep: ["sheep", "lamb", "goat"]
+  sofa: ["sofa", "couch"]
+  train: ["train"]
+  monitor: ["monitor", "screen", "television", "tv", "tvmonitor"]
+bg_category:
+  [
+    "ground",
+    "land",
+    "grass",
+    "tree",
+    "building",
+    "wall",
+    "sky",
+    "lake",
+    "water",
+    "river",
+    "sea",
+    "railway",
+    "railroad",
+    "keyboard",
+    "helmet",
+    "cloud",
+    "house",
+    "mountain",
+    "ocean",
+    "road",
+    "rock",
+    "street",
+    "valley",
+    "bridge",
+    "sign",
+  ]

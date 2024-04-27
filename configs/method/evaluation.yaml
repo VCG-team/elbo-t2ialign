@@ -1,0 +1,4 @@
+# evaluation process settings (evaluation.py)
+start: 30 # evaluation start threshold.
+end: 70 # evaluation end threshold.
+bucket_num: 10 # The number of data buckets. Log file saves evaluation results for each bucket.

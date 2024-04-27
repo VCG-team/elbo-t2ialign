@@ -5,8 +5,11 @@
 **/__pycache__/
 
 # dataset
-COCO2014
 VOCdevkit
+COCO2014
+COCO2017
+coco_stuff10k
+coco_stuff164k
 
 # output
 output
