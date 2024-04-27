@@ -14,15 +14,15 @@ use_cls_predict: False
 # model path
 diffusion:
   path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
-  device: 4
+  device: 0
   dtype: "fp16"
 
 blip:
   path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
-  device: 4
+  device: 0
   dtype: "fp32"
 
 clip:
   path: "/data2/wjl/sdsseg/open_vocabulary/clip-vit-large-patch14"
-  device: 4
+  device: 0
   dtype: "fp32"
