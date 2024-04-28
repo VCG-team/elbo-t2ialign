@@ -7,7 +7,6 @@ from collections import defaultdict
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
 from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm
@@ -31,8 +30,9 @@ def load_predict_and_gt(
         idx_to_cls[idx].append(cls)
 
     # ground truth filename list
-    df = pd.read_csv(gt_list, names=["filename"])
-    name_list = df["filename"].values
+    df = open(gt_list, "r")
+    name_list = [name.strip() for name in df.readlines()]
+    df.close()
 
     # load each image gt and predict in name_list order
     for idx in tqdm(range(len(name_list)), desc="get image statistics..."):
