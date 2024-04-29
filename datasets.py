@@ -118,13 +118,17 @@ class COCOClsDataset(Dataset):
 
 
 def build_dataset(config: DictConfig) -> Dataset:
-    # check: use cls_predict.npy or cls_labels.npy
-    if config.use_cls_predict:
+    # checking use cls_predict.npy or cls_labels.npy
+    # see ./configs/io/io.yaml for details
+    if not config.use_cls_predict:
+        label_file_path = config.name_to_cls_labels
+    elif config.cls_predict == "":
         label_file_path = os.path.join(config.output_path, "cls_predict.npy")
     else:
-        label_file_path = config.name_to_cls_labels
+        label_file_path = config.cls_predict
     if not os.path.exists(label_file_path):
         sys.exit("Label file not found")
+
     # construct dataset
     name_to_cls: Dict[str, Dataset] = {
         "voc": VOC12Dataset,
