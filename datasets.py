@@ -21,14 +21,7 @@ def load_img_name_list(dataset_path):
 def load_image_label_list_from_npy(img_name_list, label_file_path):
 
     cls_labels_dict = np.load(label_file_path, allow_pickle=True).item()
-    label_list = []
-
-    for id in img_name_list:
-        if id not in cls_labels_dict.keys():
-            img_name = f"{id}.jpg"
-        else:
-            img_name = id
-        label_list.append(cls_labels_dict[img_name])
+    label_list = [cls_labels_dict[img_name] for img_name in img_name_list]
 
     return label_list
 
@@ -36,9 +29,9 @@ def load_image_label_list_from_npy(img_name_list, label_file_path):
 class VOC12Dataset(Dataset):
     def __init__(
         self,
-        img_name_list_path,
-        voc12_root,
-        label_file_path,
+        img_name_list_path="./data/voc/val_id.txt",
+        voc12_root="./VOCdevkit/VOC2012",
+        label_file_path="./data/voc/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -62,9 +55,9 @@ class VOC12Dataset(Dataset):
 class VOCContextDataset(Dataset):
     def __init__(
         self,
-        img_name_list_path,
-        voc10_root,
-        label_file_path,
+        img_name_list_path="./data/context/val_id.txt",
+        voc10_root="./VOCdevkit/VOC2010",
+        label_file_path="./data/context/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(
@@ -88,9 +81,9 @@ class VOCContextDataset(Dataset):
 class COCOClsDataset(Dataset):
     def __init__(
         self,
-        img_name_list_path,
-        coco_root,
-        label_file_path,
+        img_name_list_path="./data/coco/val_id.txt",
+        coco_root="./coco_stuff164k",
+        label_file_path="./data/coco/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
         self.label_list = load_image_label_list_from_npy(

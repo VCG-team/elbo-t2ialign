@@ -1,4 +1,5 @@
 import os
+import shutil
 import warnings
 from argparse import ArgumentParser
 
@@ -58,13 +59,13 @@ if __name__ == "__main__":
     OmegaConf.save(config, os.path.join(config.output_path, "segmentation.yaml"))
 
     img_output_path = os.path.join(config.output_path, "images")
+    if os.path.exists(img_output_path):
+        shutil.rmtree(img_output_path)
     os.makedirs(img_output_path, exist_ok=True)
-    diffusion_device = torch.device(config.diffusion.device)
-    blip_device = torch.device(config.blip.device)
     same_seeds(config.seed)
     dataset = build_dataset(config)
     category = list(config.category.keys())
-
+    diffusion_device = torch.device(config.diffusion.device)
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
     )
@@ -76,6 +77,7 @@ if __name__ == "__main__":
     register_attention_control(pipeline, controller, config)
 
     if config.use_blip:
+        blip_device = torch.device(config.blip.device)
         blip_processor = BlipProcessor.from_pretrained(config.blip.path)
         blip_model = BlipForConditionalGeneration.from_pretrained(config.blip.path)
         blip_model.to(blip_device)
@@ -83,7 +85,7 @@ if __name__ == "__main__":
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
     for k, (img, label, name) in tqdm(
-        enumerate(dataset), total=len(dataset), desc="Processing images..."
+        enumerate(dataset), total=len(dataset), desc="processing images..."
     ):
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
@@ -107,11 +109,11 @@ if __name__ == "__main__":
                         img, text_source[:-1], return_tensors="pt"
                     ).to(blip_device)
                     blip_out = blip_model.generate(**blip_inputs)
-                    blip_out_prompt = blip_processor.decode(
+                    blip_out_text = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
                     )
                     # update pos for cross attention extraction
-                    next_word = blip_out_prompt[len(text_source) :].split(" ")[0]
+                    next_word = blip_out_text[len(text_source) :].split(" ")[0]
                     if next_word.endswith("ing"):
                         pos.append(pos[-1] + 1)
                     # refer to clip-es (CVPR 2023), we add background categories to the prompt
@@ -119,7 +121,7 @@ if __name__ == "__main__":
                     # paper: https://arxiv.org/abs/2212.09506
                     text_target = (
                         text_target[:-1]
-                        + blip_out_prompt[len(text_source) - 1 :]
+                        + blip_out_text[len(text_source) - 1 :]
                         + " and "
                         + ",".join(config.bg_category)
                         + "."
@@ -127,7 +129,7 @@ if __name__ == "__main__":
                     text_source = (
                         text_source[:-1]
                         + "++"
-                        + blip_out_prompt[len(text_source) - 1 :]
+                        + blip_out_text[len(text_source) - 1 :]
                         + " and "
                         + ",".join(config.bg_category)
                         + "."

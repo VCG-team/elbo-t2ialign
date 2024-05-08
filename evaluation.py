@@ -130,7 +130,7 @@ def apply_metrics(
     sort_fn: Callable = None,
     bucket_num: int = 1,
 ) -> Dict[str, List]:
-    # evaluation metrices for each data bucket
+    # evaluation metrics for each data bucket
     metrics = {
         "m_IoU": [],
         "m_TP_T": [],
@@ -255,7 +255,7 @@ if __name__ == "__main__":
         f"threshold range: {config.start/100}-{config.end/100}, best threshold: {best_threshold:.3f}, best mIoU: {best_metrics['m_IoU'][0]:.3f}"
     )
 
-    print("logging...", end="")
+    print("applying metrics...", end="")
     log = {"best threshold": best_threshold}
 
     # 评估最优阈值下整体数据集的结果
@@ -284,7 +284,8 @@ if __name__ == "__main__":
     )
     log.update({"foreground(sort by t)": metrics})
 
-    with open(os.path.join(config.output_path, "evaluation.json"), "w") as f:
+    metrics_output_path = os.path.join(config.output_path, "segmentation_metrics.json")
+    with open(metrics_output_path, "w") as f:
         json.dump(log, f, indent=4)
 
     print("done")

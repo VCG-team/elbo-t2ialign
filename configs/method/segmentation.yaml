@@ -1,8 +1,8 @@
 # segmentation process settings (segmentation.py)
 use_blip: True
 # see ./configs/io/io.yaml for details
-# by io default, use_cls_prediction is False
-# for segmentation, we need to use predicted classes to construct dataset
+# by io.yaml default, use_cls_prediction is False
+# for open vocabulary segmentation, we need to use predicted classes to construct dataset
 use_cls_predict: True
 self_times: 1 # times to multiply self_att
 self_64_times: 1 # times to multiply self_64

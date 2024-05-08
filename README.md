@@ -9,7 +9,7 @@ A suitable [conda](https://conda.io/) environment named `ddsseg` can be created 
 ```bash
 conda env create -f environment.yaml
 conda activate ddsseg
-# download spacy model for classification
+# download spacy model for part-of-speech tags
 python -m spacy download en_core_web_sm
 ```
 
