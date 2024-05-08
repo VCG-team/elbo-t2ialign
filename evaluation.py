@@ -152,11 +152,11 @@ def apply_metrics(
 
     # compute metrics for each bucket
     for b_idx in range(bucket_num):
-        # 第b_idx个数据块的起点和终点
+        # The start and end of the b_idx data bucket
         start = b_idx * bucket_size
         end = min((b_idx + 1) * bucket_size, len(instance_statistics))
 
-        # 统计每个bucket下每个类的predict区域(P)、ground truth区域(T)、T和P的交集区域(TP)、实例数量(cls_cnt)
+        # count predict area(P)、ground truth area(T)、intersection of T and P(TP)、class num(cls_cnt) for each class
         P = np.zeros(num_cls, dtype=np.int64)
         T = np.zeros(num_cls, dtype=np.int64)
         TP = np.zeros(num_cls, dtype=np.int64)
@@ -168,6 +168,7 @@ def apply_metrics(
             TP[cls_idx] += sum_tp
             cls_cnt[cls_idx] += 1
 
+        # compute metrics
         valid_idx = cls_cnt > 0
 
         IoU = TP / (T + P - TP + 1e-10)
@@ -182,6 +183,7 @@ def apply_metrics(
         m_FP = np.mean(FP[valid_idx]) * 100
         m_FN = np.mean(FN[valid_idx]) * 100
 
+        # save metrics
         metrics["m_IoU"].append(m_IoU)
         metrics["m_TP_T"].append(m_TP_T)
         metrics["m_TP_P"].append(m_TP_P)
@@ -237,13 +239,13 @@ if __name__ == "__main__":
     for i in threshold_bar:
         # current threshold value
         t = i / 100.0
-        # 使用阈值t计算mIoU，并记录下来
+        # compute mIoU for whole dataset with threshold t
         instance_statistics = apply_threshold(image_statistics, threshold=t)
         metrics = apply_metrics(instance_statistics, bucket_num=1)
-        # 如果当前mIoU小于最好的mIoU，说明已经找到最佳阈值，停止搜索
+        # if current mIoU is less than best mIoU, we find the best threshold
         if best_metrics is not None and metrics["m_IoU"][0] < best_metrics["m_IoU"][0]:
             break
-        # 记录最优的阈值和对应的统计数据
+        # record the best threshold and corresponding statistics
         best_threshold = t
         best_metrics = metrics
         best_instance_statistics = instance_statistics
@@ -258,15 +260,17 @@ if __name__ == "__main__":
     print("applying metrics...", end="")
     log = {"best threshold": best_threshold}
 
-    # 评估最优阈值下整体数据集的结果
+    # overall metrics with best threshold
     metrics = best_metrics
     log.update({"overall": metrics})
 
-    # 评估最优阈值下所有背景类的结果
+    # background class metrics with best threshold
     metrics = apply_metrics(best_instance_statistics, filter_fn=lambda x: x[5] == 0)
     log.update({"background": metrics})
 
-    # 评估最优阈值下所有前景类的结果，按照gt占img的大小比例排序，并将数据分块
+    # evaluate the results of all foreground classes at the best threshold
+    # sorted by the ratio of gt to img size
+    # divide the data into blocks
     metrics = apply_metrics(
         best_instance_statistics,
         filter_fn=lambda x: x[5] != 0,
@@ -275,7 +279,9 @@ if __name__ == "__main__":
     )
     log.update({"foreground(sort by t_area)": metrics})
 
-    # 评估最优阈值下所有前景类的结果，按照gt的大小排序，并将数据分块
+    # evaluate the results of all foreground classes at the best threshold
+    # sorted by the size of gt
+    # divide the data into blocks
     metrics = apply_metrics(
         best_instance_statistics,
         filter_fn=lambda x: x[5] != 0,
