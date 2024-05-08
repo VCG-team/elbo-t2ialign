@@ -94,31 +94,29 @@ def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tup
 
         # image meta info
         h, w = gt.shape
-        # we follow MCTFormer (CVPR 2022) to prepare VOCaug dataset annotations.
-        # so we only use valid region to compute metrics in VOCaug dataset.
-        # related code: https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py#L40
-        cal = True
-        if config.dataset == "voc":
-            cal = gt < 255
 
         # compute predicted background region by threshold
         background = predict_value < threshold
         predict_copy = predict.copy()
         predict_copy[background] = 0
 
+        # we follow MCTFormer (CVPR 2022) to prepare VOCaug dataset annotations.
+        # so we only use valid region to compute metrics in VOCaug dataset.
+        # related code: https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py#L40
+        if config.dataset == "voc":
+            predict_copy[gt == 255] = 255
+
         # get instance level statistics for each class
-        for cls_idx in range(num_cls):
+        p = dict(zip(*np.unique(predict_copy, return_counts=True)))
+        t = dict(zip(*np.unique(gt, return_counts=True)))
+        tp = dict(zip(*np.unique(gt[predict_copy == gt], return_counts=True)))
 
-            p = (predict_copy == cls_idx) * cal
-            t = gt == cls_idx
-            sum_p = np.sum(p)
-            sum_t = np.sum(t)
+        cls_idxes = (set(p.keys()) | set(t.keys())) - {255}
 
-            if sum_t == 0 and sum_p == 0:
-                continue
-
-            sum_tp = np.sum(t * p)
-
+        for cls_idx in cls_idxes:
+            sum_p = p.get(cls_idx, 0)
+            sum_t = t.get(cls_idx, 0)
+            sum_tp = tp.get(cls_idx, 0)
             instance_statistics.append((sum_p, sum_t, sum_tp, h, w, cls_idx, img_idx))
 
     return instance_statistics
