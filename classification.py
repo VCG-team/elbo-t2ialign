@@ -92,8 +92,8 @@ if __name__ == "__main__":
     text_prompts = [
         "",
         "a photo of",
-        "an image of",
         "there are many things in the image, including",
+        "except for the most prominent objects, there are",
     ]
 
     image_classification_bar = tqdm(dataset)

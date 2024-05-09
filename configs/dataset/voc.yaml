@@ -35,7 +35,7 @@ category:
   cat: ["lynx", "kitten", "cat"]
   chair: ["stool", "chair"]
   cow: ["bison", "cattle", "bull", "cow"]
-  dining table: ["dining table", "dining-table", "diningtable"]
+  table: ["dining table", "diningtable", "table", "desk"]
   dog: ["dog", "puppy", "dachshund", "pug"]
   horse: ["pony", "horse"]
   motorbike: ["motorbike", "scooter"]

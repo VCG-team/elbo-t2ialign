@@ -63,7 +63,9 @@ python -m spacy download en_core_web_sm
 
 Reproducing the results will need about 10G GPU memory. We are still working on reducing the memory cost for reproductions.
 
-You can change configuration file in `config` folder to test different settings. Welcome to open an issue if you have any questions. 
+To test different settings, you can change configuration files in `config` folder, or pass command line arguments following [OmegaConf](https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#usage).
+
+Welcome to open an issue if you have any questions. 
 
 ### Reproduce PASCAL VOC Results
 

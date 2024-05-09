@@ -99,8 +99,8 @@ if __name__ == "__main__":
             cls_name = category[y[i].item()]
             cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
             pos = [4 + i for i in range(cls_name_len)]
-            text_source = f"a photograph of {cls_name}."
-            text_target = f"a photograph of ''."
+            text_source = f"a photo of {cls_name}."
+            text_target = f"a photo of ''."
 
             if config.use_blip:
                 with torch.inference_mode():

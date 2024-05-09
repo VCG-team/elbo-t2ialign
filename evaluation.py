@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
+from joblib import Parallel, delayed
 from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm
@@ -86,11 +87,10 @@ def load_predict_and_gt(
 
 
 def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tuple]:
-    # store instance level statistics, notice one image has multiple instances
-    instance_statistics = []
 
-    # process each image in image_statistics order
-    for gt, predict_value, predict, img_idx in image_statistics:
+    def process(gt, predict_value, predict, img_idx):
+        # store instance level statistics, notice one image has multiple instances
+        instance_statistics = []
 
         # image meta info
         h, w = gt.shape
@@ -112,14 +112,18 @@ def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tup
         tp = dict(zip(*np.unique(gt[predict_copy == gt], return_counts=True)))
 
         cls_idxes = (set(p.keys()) | set(t.keys())) - {255}
-
         for cls_idx in cls_idxes:
             sum_p = p.get(cls_idx, 0)
             sum_t = t.get(cls_idx, 0)
             sum_tp = tp.get(cls_idx, 0)
             instance_statistics.append((sum_p, sum_t, sum_tp, h, w, cls_idx, img_idx))
 
-    return instance_statistics
+        return instance_statistics
+
+    # apply threshold in parallel with joblib
+    # related docs: https://joblib.readthedocs.io/en/latest/parallel.html#embarrassingly-parallel-for-loops
+    results = Parallel(n_jobs=3)(delayed(process)(*item) for item in image_statistics)
+    return sum(results, [])
 
 
 def apply_metrics(
