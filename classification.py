@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     # prepare sentences' embeddings to compute cos similarity of image and text
     if config.enable_text_and_image_similarity:
-        sentences = ["a photo of " + label for label in labels]
+        sentences = ["a photograph of " + label for label in labels]
         sentences_input = clip_tokenizer(sentences, padding=True, return_tensors="pt")
         sentences_input = sentences_input.to(clip_device)
         sentences_features = clip_model.get_text_features(**sentences_input)
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     predict = defaultdict(dict)
     text_prompts = [
         "",
-        "a photo of",
+        "a photograph of",
         "there are many things in the image, including",
         "except for the most prominent objects, there are",
     ]
