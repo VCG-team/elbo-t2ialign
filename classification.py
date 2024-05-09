@@ -89,11 +89,16 @@ if __name__ == "__main__":
 
     # generate multi-label classification results
     predict = defaultdict(dict)
-    text_prompts = ["", "a photo of", "a photograph of", "an image of"]
+    text_prompts = [
+        "",
+        "a photo of",
+        "an image of",
+        "there are many things in the image, including",
+    ]
 
     image_classification_bar = tqdm(dataset)
     image_classification_bar.set_description("image multi-label classification")
-    for data_idx, (image, _, name) in enumerate(image_classification_bar):
+    for data_idx, (image, label, name) in enumerate(image_classification_bar):
         label_predict = set()
 
         # 1. generate text for all text prompts, and extract nouns and all words
