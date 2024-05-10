@@ -17,12 +17,9 @@ num_cls = 0
 config = None
 
 
-def load_predict_and_gt(
+def load_gt_and_predict(
     predict_folder: str, data_root: str, gt_list: str
 ) -> List[Tuple]:
-    # store image level statistics
-    image_statistics = []
-
     # convert img idx to the predicted cls names
     idx_to_cls = defaultdict(list)
     for predict_file in os.listdir(predict_folder):
@@ -35,9 +32,8 @@ def load_predict_and_gt(
     name_list = [name.strip() for name in df.readlines()]
     df.close()
 
-    # load each image gt and predict in name_list order
-    for idx in tqdm(range(len(name_list)), desc="get image statistics..."):
-        # 1. load gt
+    def process(idx):
+        # 1. load ground truth
         name = name_list[idx]
         if config.dataset == "coco":
             gt_path = os.path.join(
@@ -48,7 +44,7 @@ def load_predict_and_gt(
         elif config.dataset == "context":
             gt_path = os.path.join(data_root, "SegmentationClassContext", f"{name}.png")
         else:
-            sys.exit("Unknown dataset")
+            sys.exit("unknown dataset")
         gt = np.array(Image.open(gt_path))
         # follow GroupViT (CVPR 2022), we only use first 80 classes in COCO, set other classes to background
         # related code: https://github.com/NVlabs/GroupViT/blob/main/convert_dataset/convert_coco_object.py
@@ -59,34 +55,34 @@ def load_predict_and_gt(
         # 2. load predict
         h, w = gt.shape
         predict = np.zeros((num_cls, h, w), np.float32)
-
         # get all cls predict in this image
         for cls in idx_to_cls[idx]:
             predict_file = os.path.join(predict_folder, f"{idx}_{cls}.png")
             predict_cls = np.array(Image.open(predict_file), dtype=np.float32) / 255
-
-            # search for cls_idx
+            # search cls_idx
             cls_idx = 1
             for cls_name in config.category:
                 if cls == str(cls_name) or cls in config.category[cls_name]:
                     break
                 cls_idx += 1
             if cls_idx == num_cls:
-                sys.exit(f"Unknown class: {cls}")
-
+                sys.exit(f"unknown class: {cls}")
             predict[cls_idx] = predict_cls
-
         # merge all cls predict to get the final predict
         predict_value = np.max(predict, axis=0)
         predict = np.argmax(predict, axis=0).astype(np.uint8)
 
-        # 3. save image level statistics
-        image_statistics.append((gt, predict_value, predict, idx))
+        return (gt, predict_value, predict, idx)
 
-    return image_statistics
+    # use joblib with tqdm to load gt and predict in parallel
+    # see: https://stackoverflow.com/a/77948954/12389770
+    results = Parallel(n_jobs=4, return_as="generator")(
+        delayed(process)(idx) for idx in range(len(name_list))
+    )
+    return list(tqdm(results, desc="loading gt and predict...", total=len(name_list)))
 
 
-def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tuple]:
+def apply_threshold(gt_and_predict: List[Tuple], threshold: float) -> List[Tuple]:
 
     def process(gt, predict_value, predict, img_idx):
         # store instance level statistics, notice one image has multiple instances
@@ -122,7 +118,7 @@ def apply_threshold(image_statistics: List[Tuple], threshold: float) -> List[Tup
 
     # apply threshold in parallel with joblib
     # related docs: https://joblib.readthedocs.io/en/latest/parallel.html#embarrassingly-parallel-for-loops
-    results = Parallel(n_jobs=3)(delayed(process)(*item) for item in image_statistics)
+    results = Parallel(n_jobs=4)(delayed(process)(*item) for item in gt_and_predict)
     return sum(results, [])
 
 
@@ -198,6 +194,19 @@ def apply_metrics(
     return metrics
 
 
+# use gt_and_predict and threshold to calculate the key metric.
+# during evaluation, we adjust threshold to get the best key metric.
+def get_key_metric(gt_and_predict: List[Tuple], threshold: float):
+    instance_statistics = apply_threshold(gt_and_predict, threshold)
+    metrics = apply_metrics(instance_statistics, bucket_num=1)
+    key_metric = metrics["m_IoU"][0]
+    return {
+        "statistics": instance_statistics,
+        "metrics": metrics,
+        "key_metric": key_metric,
+    }
+
+
 if __name__ == "__main__":
 
     parser = ArgumentParser()
@@ -226,66 +235,71 @@ if __name__ == "__main__":
     category.insert(0, "background")
     num_cls = len(category)
 
-    image_statistics = load_predict_and_gt(
+    gt_and_predict = load_gt_and_predict(
         predict_dir, config.data_root, config.data_name_list
     )
 
-    best_threshold = 0
-    best_metrics = None
-    best_instance_statistics = None
-
-    threshold_bar = tqdm(
-        range(config.start, config.end), initial=config.start, total=config.end
+    # binary search to find the best threshold for key metric
+    threshold_bar = tqdm(desc="searching best threshold for key metric...")
+    # 1. init left and right
+    l, r = config.start, config.end
+    l_info = get_key_metric(gt_and_predict, l / 100)
+    r_info = l_info if l == r else get_key_metric(gt_and_predict, r / 100)
+    threshold_bar.update(1)
+    threshold_bar.set_description(
+        f"threshold-{l/100}, key metric-{l_info['key_metric']:.3f}"
     )
-    threshold_bar.set_description("applying threshold...")
-    for i in threshold_bar:
-        # current threshold value
-        t = i / 100.0
-        # compute mIoU for whole dataset with threshold t
-        instance_statistics = apply_threshold(image_statistics, threshold=t)
-        metrics = apply_metrics(instance_statistics, bucket_num=1)
-        # if current mIoU is less than best mIoU, we find the best threshold
-        if best_metrics is not None and metrics["m_IoU"][0] < best_metrics["m_IoU"][0]:
-            break
-        # record the best threshold and corresponding statistics
-        best_threshold = t
-        best_metrics = metrics
-        best_instance_statistics = instance_statistics
+    # 2. binary search
+    while l < r:
+        mid = (l + r) // 2
+        mid_info = l_info if mid == l else get_key_metric(gt_and_predict, mid / 100)
+
+        mid1 = mid + 1
+        mid1_info = r_info if mid1 == r else get_key_metric(gt_and_predict, mid1 / 100)
+
+        if mid_info["key_metric"] < mid1_info["key_metric"]:
+            l, l_info = mid1, mid1_info
+        else:
+            r, r_info = mid, mid_info
+
+        threshold_bar.update(1)
         threshold_bar.set_description(
-            f"threshold-{t:.3f}, mIoU-{best_metrics['m_IoU'][0]:.3f}"
+            f"threshold-{mid/100}, key metric-{mid_info['key_metric']:.3f}"
         )
-
+    # 3. print best threshold and key metric
+    threshold_bar.close()
     print(
-        f"threshold range: {config.start/100}-{config.end/100}, best threshold: {best_threshold:.3f}, best mIoU: {best_metrics['m_IoU'][0]:.3f}"
+        f"threshold range: {config.start/100}-{config.end/100}, best threshold: {l/100}, best key metric: {l_info['key_metric']:.3f}"
     )
 
-    print("applying metrics...", end="")
-    log = {"best threshold": best_threshold}
+    # collect other metrics
+    print("collecting other metrics...", end="")
+    log = {"best threshold": l / 100}
 
-    # overall metrics with best threshold
-    metrics = best_metrics
+    # 1. overall metrics with best threshold
+    metrics = apply_metrics(l_info["statistics"], bucket_num=1)
     log.update({"overall": metrics})
 
-    # background class metrics with best threshold
-    metrics = apply_metrics(best_instance_statistics, filter_fn=lambda x: x[5] == 0)
+    # 2. background class metrics with best threshold
+    metrics = apply_metrics(l_info["statistics"], filter_fn=lambda x: x[5] == 0)
     log.update({"background": metrics})
 
-    # evaluate the results of all foreground classes at the best threshold
+    # 3. metrics of all foreground classes at the best threshold
     # sorted by the ratio of gt to img size
     # divide the data into blocks
     metrics = apply_metrics(
-        best_instance_statistics,
+        l_info["statistics"],
         filter_fn=lambda x: x[5] != 0,
         sort_fn=lambda x: x[1] / (x[3] * x[4]),
         bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t_area)": metrics})
 
-    # evaluate the results of all foreground classes at the best threshold
+    # 4. metrics of all foreground classes at the best threshold
     # sorted by the size of gt
     # divide the data into blocks
     metrics = apply_metrics(
-        best_instance_statistics,
+        l_info["statistics"],
         filter_fn=lambda x: x[5] != 0,
         sort_fn=lambda x: int(x[1]),
         bucket_num=config.bucket_num,

@@ -20,4 +20,4 @@ dependencies:
       - transformers==4.36.2
       - accelerate==0.30.0
       - scikit-learn==1.4.2
-      - joblib==1.1.0
+      - joblib==1.4.2
