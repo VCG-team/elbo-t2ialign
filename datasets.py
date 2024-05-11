@@ -120,7 +120,7 @@ def build_dataset(config: DictConfig) -> Dataset:
     else:
         label_file_path = config.cls_predict
     if not os.path.exists(label_file_path):
-        sys.exit("Label file not found")
+        sys.exit("label file not found")
 
     # construct dataset
     name_to_cls: Dict[str, Dataset] = {
@@ -129,6 +129,6 @@ def build_dataset(config: DictConfig) -> Dataset:
         "context": VOCContextDataset,
     }
     if config.dataset not in name_to_cls:
-        sys.exit("Dataset not supported")
+        sys.exit("dataset not supported")
     dataset_cls = name_to_cls[config.dataset]
     return dataset_cls(config.data_name_list, config.data_root, label_file_path)

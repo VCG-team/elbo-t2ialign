@@ -228,7 +228,7 @@ if __name__ == "__main__":
     OmegaConf.save(config, os.path.join(config.output_path, "evaluation.yaml"))
 
     if config.start >= config.end:
-        sys.exit("Start threshold should be less than end")
+        sys.exit("start threshold should be less than end")
 
     predict_dir = os.path.join(config.output_path, "images")
     category = list(config.category.keys())
