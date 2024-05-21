@@ -9,12 +9,15 @@ import torch
 import torch.nn.functional as F
 from diffusers import StableDiffusionPipeline
 from omegaconf import OmegaConf
-from PIL import Image
 from tqdm import tqdm
 from transformers import BlipForConditionalGeneration, BlipProcessor
 
 from datasets import build_dataset
-from utils.dds_utils import image_optimization
+from utils.dds_utils import (
+    get_image_embeddings,
+    get_text_embeddings,
+    image_optimization,
+)
 from utils.ptp_utils import (
     AttentionStore,
     aggregate_cross_att,
@@ -62,9 +65,11 @@ if __name__ == "__main__":
     if os.path.exists(img_output_path):
         shutil.rmtree(img_output_path)
     os.makedirs(img_output_path, exist_ok=True)
-    same_seeds(config.seed)
+
     dataset = build_dataset(config)
     category = list(config.category.keys())
+    same_seeds(config.seed)
+
     diffusion_device = torch.device(config.diffusion.device)
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
@@ -72,9 +77,9 @@ if __name__ == "__main__":
     pipeline = StableDiffusionPipeline.from_pretrained(
         config.diffusion.path, torch_dtype=diffusion_dtype
     ).to(diffusion_device)
-
     controller = AttentionStore()
     register_attention_control(pipeline, controller, config)
+    embedding_null = get_text_embeddings(pipeline, "")
 
     if config.use_blip:
         blip_device = torch.device(config.blip.device)
@@ -84,27 +89,25 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (img, label, name) in tqdm(
-        enumerate(dataset), total=len(dataset), desc="processing images..."
-    ):
+    for k, (img, label, name) in enumerate(tqdm(dataset, desc="processing images...")):
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
-        y = torch.where(label)[0]
-        img_512 = np.array(img.resize((512, 512), resample=Image.BILINEAR))
+        labels = torch.where(label)[0].tolist()
+        z_source = get_image_embeddings(pipeline, img)
 
-        # generate mask for each label in the image·
-        for i in range(y.shape[0]):
-            # 1. prompts generation
-            cls_name = category[y[i].item()]
+        # generate mask for each label in the image
+        for cls_idx in labels:
+            # 1. generate text prompts
+            cls_name = category[cls_idx]
             cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
             pos = [4 + i for i in range(cls_name_len)]
             text_source = f"a photograph of {cls_name}."
             text_target = f"a photograph of ''."
 
             if config.use_blip:
+                # blip inference
                 with torch.inference_mode():
-                    # blip inference
                     blip_inputs = blip_processor(
                         img, text_source[:-1], return_tensors="pt"
                     ).to(blip_device)
@@ -112,34 +115,64 @@ if __name__ == "__main__":
                     blip_out_text = blip_processor.decode(
                         blip_out[0], skip_special_tokens=True
                     )
-                    # update pos for cross attention extraction
-                    next_word = blip_out_text[len(text_source) :].split(" ")[0]
-                    if next_word.endswith("ing"):
-                        pos.append(pos[-1] + 1)
-                    # refer to clip-es (CVPR 2023), we add background categories to the prompt
-                    # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
-                    # paper: https://arxiv.org/abs/2212.09506
-                    text_target = (
-                        text_target[:-1]
-                        + blip_out_text[len(text_source) - 1 :]
-                        + " and "
-                        + ",".join(config.bg_category)
-                        + "."
-                    )
-                    text_source = (
-                        text_source[:-1]
-                        + "++"
-                        + blip_out_text[len(text_source) - 1 :]
-                        + " and "
-                        + ",".join(config.bg_category)
-                        + "."
-                    )
+                # update pos for cross attention extraction
+                next_word = blip_out_text[len(text_source) :].split(" ")[0]
+                if next_word.endswith("ing"):
+                    pos.append(pos[-1] + 1)
+                # refer to clip-es (CVPR 2023), we add background categories to the prompt
+                # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
+                # paper: https://arxiv.org/abs/2212.09506
+                text_target = (
+                    text_target[:-1]
+                    + blip_out_text[len(text_source) - 1 :]
+                    + " and "
+                    + ",".join(config.bg_category)
+                    + "."
+                )
+                text_source = (
+                    text_source[:-1]
+                    + "++"
+                    + blip_out_text[len(text_source) - 1 :]
+                    + " and "
+                    + ",".join(config.bg_category)
+                    + "."
+                )
 
-            # 2. dds loss optimization
+            # 2. get image and text embeddings
+            z_target = z_source.clone()
+            embedding_source = get_text_embeddings(pipeline, text_source)
+            embedding_source = torch.stack([embedding_null, embedding_source], dim=1)
+            embedding_target = get_text_embeddings(pipeline, text_target)
+            embedding_target = torch.stack([embedding_null, embedding_target], dim=1)
+
+            # 3. dds loss optimization and attention maps collection
+            if len(config.timesteps) > 0:
+                config.optimize_timesteps = config.timesteps
             controller.reset()
-            image_optimization(pipeline, img_512, text_source, text_target, config)
+            z_target = image_optimization(
+                pipeline,
+                z_source,
+                z_target,
+                embedding_source,
+                embedding_target,
+                config.optimize_timesteps,
+                config.loss_type,
+                config,
+            )
+            if config.delay_collection:
+                controller.reset()
+                image_optimization(
+                    pipeline,
+                    z_source,
+                    z_target,
+                    embedding_source,
+                    embedding_target,
+                    config.collect_timesteps,
+                    "none",
+                    config,
+                )
 
-            # 3. refine attention map
+            # 4. refine attention map
             att_map = aggregate_cross_att(controller, pos, config)
 
             self_att = aggregate_self_att(controller, config)
@@ -150,7 +183,7 @@ if __name__ == "__main__":
             for _ in range(config.self_64_times):
                 att_map = torch.matmul(self_64, att_map)
 
-            # 4. save attention map as mask
+            # 5. save attention map as mask
             mask = att_map.view(1, 1, 64, 64)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255

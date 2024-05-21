@@ -4,6 +4,8 @@ use_blip: True
 # by io.yaml default, use_cls_prediction is False
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset
 use_cls_predict: True
+delay_collection: False # whether to delay the collection of attention maps
+collect_timesteps: [75, 100, 125] # timesteps to collect attention maps
 self_times: 1 # times to multiply self_att
 self_64_times: 1 # times to multiply self_64
 
@@ -12,17 +14,18 @@ self_64_times: 1 # times to multiply self_64
 # As img pass down->mid->up unet block, img resolution will pass 64*2->32*2->16*2->8->16*3->32*3->64*3.
 # Only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109).
 # So we can choose some layers to achieve better performance.
-target_factor: 0.5 # source img latent需要融合target img latent的比例
-valid_cross_layer: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # 需要选择的cross attention层
-cross_weight: [1, 1, 1, 1, 10, 10, 15, 10, 10, 10, 1, 1, 1, 1, 1, 1] # 每一层cross attention的权重，列表长度需要和valid_cross_attn一致
-valid_self_layer: [0, 1, 13, 14, 15] # 需要选择的self attention层
-self_weight: [1, 1, 1, 1, 1] # 每一层self attention的权重，列表长度需要和valid_self_attn一致
+target_factor: 0.5 # ratio of target latent merged into source latent, x = source + target_factor * (source - target)
+valid_cross_layer: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # cross attention layer to select
+cross_weight: [1, 1, 1, 1, 10, 10, 15, 10, 10, 10, 1, 1, 1, 1, 1, 1] # weight of cross attention for each layer, the length of the list should be the same as valid_cross_layer
+valid_self_layer: [0, 1, 13, 14, 15] # self attention layer to select
+self_weight: [1, 1, 1, 1, 1] # weight of self attention for each layer, the length of the list should be the same as valid_self_layer
 
 # dds loss settings (dds_utils.py)
-use_dds: True
-timesteps: [1, 25, 50, 75, 100, 125, 150]
+optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
+timesteps: [] # deprecated, replaced by optimize_timesteps, may be removed in the future
+loss_type: "dds" # loss function, "dds" or "sds" or "none"
+loss_factor: 2000.0 # coefficient of loss
+lr: 1.0e-1 # learning rate
 guidance_scale: 7.5
-lr: 1.0e-1
-loss_factor: 2000.0
 alpha_exp: 0.0
 sigma_exp: 0.0

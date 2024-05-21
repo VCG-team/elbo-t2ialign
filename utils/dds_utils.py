@@ -15,12 +15,18 @@ TS = Union[Tuple[T, ...], List[T]]
 
 
 @torch.inference_mode()
-def get_text_embeddings(
-    pipe: StableDiffusionPipeline, text: str, device=torch.device("cpu")
-) -> T:
+def get_text_embeddings(pipe: StableDiffusionPipeline, text: str) -> T:
     compel_proc = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
-    embeddings = compel_proc(text).to(device)
+    embeddings = compel_proc(text)
     return embeddings
+
+
+@torch.inference_mode()
+def get_image_embeddings(pipe: StableDiffusionPipeline, image: Image):
+    img_512 = np.array(image.resize((512, 512), resample=Image.BILINEAR))
+    img_tensor = torch.from_numpy(img_512).float().permute(2, 0, 1) / 127.5 - 1
+    img_tensor = img_tensor.unsqueeze(0).to(pipe.device, dtype=pipe.dtype)
+    return pipe.vae.encode(img_tensor)["latent_dist"].mean * pipe.vae.scaling_factor
 
 
 @torch.inference_mode()
@@ -51,16 +57,31 @@ def init_pipe(device, dtype, unet, scheduler) -> Tuple[UNet2DConditionModel, T, 
 
 
 class DDSLoss:
+    instance = None
+    init_flag = False
 
-    def __init__(self, device, pipe: StableDiffusionPipeline, dtype=torch.float32):
+    def __new__(cls, *args, **kwargs):
+        if cls.instance is None:
+            cls.instance = super().__new__(cls)
+        return cls.instance
+
+    def __init__(
+        self,
+        pipe: StableDiffusionPipeline,
+        alpha_exp=0,
+        sigma_exp=0,
+    ):
+        if DDSLoss.init_flag:
+            return
+        DDSLoss.init_flag = True
         self.t_min = 50
         self.t_max = 200
-        self.alpha_exp = 0
-        self.sigma_exp = 0
+        self.alpha_exp = alpha_exp
+        self.sigma_exp = sigma_exp
         self.rescale = 1
-        self.dtype = dtype
+        self.dtype = pipe.dtype
         self.unet, self.alphas, self.sigmas = init_pipe(
-            device, dtype, pipe.unet, pipe.scheduler
+            pipe.device, pipe.dtype, pipe.unet, pipe.scheduler
         )
         self.prediction_type = pipe.scheduler.prediction_type
 
@@ -125,7 +146,6 @@ class DDSLoss:
         text_embeddings: T,
         eps: TN = None,
         mask=None,
-        t=None,
         timestep: Optional[int] = None,
         guidance_scale=7.5,
         return_eps=False,
@@ -217,55 +237,84 @@ class DDSLoss:
 
         return loss, log_loss
 
+    def get_none_loss(
+        self,
+        z_source: T,
+        z_target: T,
+        text_emb_source: T,
+        text_emb_target: T,
+        eps=None,
+        timestep: Optional[int] = None,
+        guidance_scale=7.5,
+        return_eps=False,
+    ):
+        with torch.inference_mode():
+            z_t_source, eps, timestep, alpha_t, sigma_t = self.noise_input(
+                z_source, eps, timestep
+            )
+            z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
+            # text_emb shape after torch.cat: (2, 2, num_token, emb_dim), 1st dim is for source/target, 2nd dim is for uncond/cond
+            _, _ = self.get_eps_prediction(
+                torch.cat((z_t_source, z_t_target)),
+                torch.cat((timestep, timestep)),
+                torch.cat((text_emb_source, text_emb_target)),
+                torch.cat((alpha_t, alpha_t)),
+                torch.cat((sigma_t, sigma_t)),
+                guidance_scale=guidance_scale,
+            )
+            if return_eps:
+                return 0, 0, eps
+            return 0, 0
+
 
 def image_optimization(
-    pipeline: StableDiffusionPipeline,
-    image: np.ndarray,
-    text_source: str,
-    text_target: str,
+    pipe: StableDiffusionPipeline,
+    z_source: T,
+    z_target: T,
+    embedding_source: T,
+    embedding_target: T,
+    timesteps: List[int],
+    loss_type: str,
     config: DictConfig,
-) -> None:
-    device = torch.device(config.diffusion.device)
-    dds_loss = DDSLoss(device, pipeline)
-    dds_loss.alpha_exp = config.alpha_exp
-    dds_loss.sigma_exp = config.sigma_exp
-    image_source = torch.from_numpy(image).float().permute(2, 0, 1) / 127.5 - 1
-    image_source = image_source.unsqueeze(0).to(device, pipeline.dtype)
-    with torch.inference_mode():
-        z_source: T = (
-            pipeline.vae.encode(image_source)["latent_dist"].mean
-            * pipeline.vae.scaling_factor
-        )
-        # shape: (1, num_token, emb_dim)
-        embedding_null = get_text_embeddings(pipeline, "", device=device)
-        embedding_text = get_text_embeddings(pipeline, text_source, device=device)
-        embedding_text_target = get_text_embeddings(
-            pipeline, text_target, device=device
-        )
-        # shape: (1, 2, num_token, emb_dim), 2nd dim is for uncond/cond
-        embedding_source = torch.stack([embedding_null, embedding_text], dim=1)
-        embedding_target = torch.stack([embedding_null, embedding_text_target], dim=1)
+) -> T:
+    dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
 
-    z_target = z_source.clone()
-    z_target.requires_grad = True
-    guidance_scale = config.guidance_scale
-    optimizer = SGD(params=[z_target], lr=config.lr)
-
-    for t in config.timesteps:
-        if config.use_dds:
-            loss, log_loss = dds_loss.get_dds_loss(
+    if loss_type == "none":
+        for t in timesteps:
+            _, _ = dds_loss.get_none_loss(
                 z_source,
                 z_target,
                 embedding_source,
                 embedding_target,
                 timestep=t,
-                guidance_scale=guidance_scale,
+                guidance_scale=config.guidance_scale,
+            )
+        return z_target
+
+    z_target.requires_grad = True
+    optimizer = SGD(params=[z_target], lr=config.lr)
+
+    for t in timesteps:
+        if loss_type == "dds":
+            loss, _ = dds_loss.get_dds_loss(
+                z_source,
+                z_target,
+                embedding_source,
+                embedding_target,
+                timestep=t,
+                guidance_scale=config.guidance_scale,
+            )
+        elif loss_type == "sds":
+            loss, _ = dds_loss.get_sds_loss(
+                z_target,
+                embedding_target,
+                timestep=t,
+                guidance_scale=config.guidance_scale,
             )
         else:
-            loss, log_loss = dds_loss.get_sds_loss(
-                z_target, embedding_target, timestep=t, guidance_scale=guidance_scale
-            )
+            raise ValueError(f"Invalid loss type: {loss}")
 
         optimizer.zero_grad()
         (config.loss_factor * loss).backward()
         optimizer.step()
+    return z_target
