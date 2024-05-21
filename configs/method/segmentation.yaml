@@ -5,7 +5,8 @@ use_blip: True
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset
 use_cls_predict: True
 delay_collection: False # whether to delay the collection of attention maps
-collect_timesteps: [75, 100, 125] # timesteps to collect attention maps
+collect_timesteps: [1, 25, 50, 75, 100, 125, 150] # timesteps to collect attention maps, only valid when delay_collection is True
+collect_with_original_eps: True # whether to collect attention maps with original eps, only valid when delay_collection is True
 self_times: 1 # times to multiply self_att
 self_64_times: 1 # times to multiply self_64
 
@@ -22,7 +23,6 @@ self_weight: [1, 1, 1, 1, 1] # weight of self attention for each layer, the leng
 
 # dds loss settings (dds_utils.py)
 optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
-timesteps: [] # deprecated, replaced by optimize_timesteps, may be removed in the future
 loss_type: "dds" # loss function, "dds" or "sds" or "none"
 loss_factor: 2000.0 # coefficient of loss
 lr: 1.0e-1 # learning rate

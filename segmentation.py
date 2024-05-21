@@ -2,9 +2,9 @@ import os
 import shutil
 import warnings
 from argparse import ArgumentParser
+from collections import defaultdict
 
 import cv2
-import numpy as np
 import torch
 import torch.nn.functional as F
 from diffusers import StableDiffusionPipeline
@@ -25,19 +25,6 @@ from utils.ptp_utils import (
     aggregate_self_att,
     register_attention_control,
 )
-
-
-# fix random seed, modified from MCTFormer (CVPR 2022)
-# related code: https://github.com/xulianuwa/MCTformer/blob/main/main.py#L152
-def same_seeds(seed):
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
 
 if __name__ == "__main__":
 
@@ -61,14 +48,16 @@ if __name__ == "__main__":
     os.makedirs(config.output_path, exist_ok=True)
     OmegaConf.save(config, os.path.join(config.output_path, "segmentation.yaml"))
 
+    torch.manual_seed(config.seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
     img_output_path = os.path.join(config.output_path, "images")
     if os.path.exists(img_output_path):
         shutil.rmtree(img_output_path)
     os.makedirs(img_output_path, exist_ok=True)
-
     dataset = build_dataset(config)
     category = list(config.category.keys())
-    same_seeds(config.seed)
 
     diffusion_device = torch.device(config.diffusion.device)
     diffusion_dtype = (
@@ -146,20 +135,21 @@ if __name__ == "__main__":
             embedding_target = torch.stack([embedding_null, embedding_target], dim=1)
 
             # 3. dds loss optimization and attention maps collection
-            if len(config.timesteps) > 0:
-                config.optimize_timesteps = config.timesteps
             controller.reset()
-            z_target = image_optimization(
+            z_target, time_to_eps = image_optimization(
                 pipeline,
                 z_source,
                 z_target,
                 embedding_source,
                 embedding_target,
-                config.optimize_timesteps,
                 config.loss_type,
+                config.optimize_timesteps,
+                defaultdict(lambda: None),
                 config,
             )
             if config.delay_collection:
+                if not config.collect_with_original_eps:
+                    time_to_eps = defaultdict(lambda: None)
                 controller.reset()
                 image_optimization(
                     pipeline,
@@ -167,8 +157,9 @@ if __name__ == "__main__":
                     z_target,
                     embedding_source,
                     embedding_target,
-                    config.collect_timesteps,
                     "none",
+                    config.collect_timesteps,
+                    time_to_eps,
                     config,
                 )
 
