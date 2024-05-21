@@ -15,5 +15,6 @@ coco_stuff164k
 # output
 output
 
-# tmp folder
+# tmp folder/file
 tmp
+test.py

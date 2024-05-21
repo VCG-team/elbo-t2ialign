@@ -256,9 +256,9 @@ class DDSLoss:
                 torch.cat((sigma_t, sigma_t)),
                 guidance_scale=guidance_scale,
             )
-            if return_eps:
-                return 0, 0, eps
-            return 0, 0
+        if return_eps:
+            return 0, 0, eps
+        return 0, 0
 
 
 def image_optimization(

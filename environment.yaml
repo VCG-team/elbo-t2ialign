@@ -21,3 +21,4 @@ dependencies:
       - accelerate==0.30.0
       - scikit-learn==1.4.2
       - joblib==1.4.2
+      - safetensors==0.4.3
