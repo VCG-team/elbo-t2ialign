@@ -5,7 +5,7 @@ from typing import List
 
 import torch
 import torch.nn.functional as F
-from diffusers import StableDiffusionPipeline
+from diffusers import DiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
 
@@ -90,7 +90,7 @@ class AttentionStore(AttentionControl):
 
 
 def register_attention_control(
-    pipe: StableDiffusionPipeline,
+    pipe: DiffusionPipeline,
     controller: AttentionStore,
     config: DictConfig,
 ):
