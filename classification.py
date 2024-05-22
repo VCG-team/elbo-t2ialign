@@ -46,16 +46,35 @@ if __name__ == "__main__":
     _ = torch.set_grad_enabled(False)
     nlp = spacy.load("en_core_web_sm")
 
-    clip_device = config.clip.device
-    clip_tokenizer = CLIPTokenizer.from_pretrained(config.clip.path)
-    clip_processor = CLIPImageProcessor.from_pretrained(config.clip.path)
-    clip_model = CLIPModel.from_pretrained(config.clip.path).to(clip_device)
-
-    blip_device = config.blip.device
-    blip_processor = BlipProcessor.from_pretrained(config.blip.path)
-    blip_model = BlipForConditionalGeneration.from_pretrained(config.blip.path).to(
-        blip_device
+    clip_device = torch.device(config.clip.device)
+    clip_dtype = torch.float16 if config.clip.dtype == "fp16" else torch.float32
+    clip_tokenizer = CLIPTokenizer.from_pretrained(
+        config.clip.variant, cache_dir=config.cache_dir
     )
+    clip_processor = CLIPImageProcessor.from_pretrained(
+        config.clip.variant,
+        cache_dir=config.cache_dir,
+    )
+    clip_model = CLIPModel.from_pretrained(
+        config.clip.variant,
+        use_safetensors=True,
+        cache_dir=config.cache_dir,
+        torch_dtype=clip_dtype,
+    ).to(clip_device)
+    clip_model = torch.compile(clip_model, mode="reduce-overhead", fullgraph=True)
+
+    blip_device = torch.device(config.blip.device)
+    blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
+    blip_processor = BlipProcessor.from_pretrained(
+        config.blip.variant, cache_dir=config.cache_dir
+    )
+    blip_model = BlipForConditionalGeneration.from_pretrained(
+        config.blip.variant,
+        use_safetensors=True,
+        cache_dir=config.cache_dir,
+        torch_dtype=blip_dtype,
+    ).to(blip_device)
+    blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
 
     # load image dataset for classification
     dataset = build_dataset(config)

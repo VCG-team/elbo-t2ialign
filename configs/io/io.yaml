@@ -16,17 +16,19 @@ use_cls_predict: False
 cls_predict: ""
 
 # model path
+cache_dir: "./models"
+
 diffusion:
-  path: "/data/wjl/.cache/huggingface/hub/models--runwayml--stable-diffusion-v1-5/snapshots/c9ab35ff5f2c362e9e22fbafe278077e196057f0"
+  variant: "runwayml/stable-diffusion-v1-5"
   device: 0
   dtype: "fp16"
 
 blip:
-  path: "/data/wjl/ptp_diffusion/blip/blip-image-captioning-large"
+  variant: "Salesforce/blip-image-captioning-large"
   device: 0
   dtype: "fp32"
 
 clip:
-  path: "/data2/wjl/sdsseg/open_vocabulary/clip-vit-large-patch14"
+  variant: "openai/clip-vit-large-patch14"
   device: 0
   dtype: "fp32"

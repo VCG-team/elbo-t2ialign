@@ -2,7 +2,6 @@
 from collections import defaultdict
 from typing import DefaultDict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from compel import Compel
 from diffusers import StableDiffusionPipeline, UNet2DConditionModel
@@ -24,28 +23,9 @@ def get_text_embeddings(pipe: StableDiffusionPipeline, text: str) -> T:
 
 @torch.inference_mode()
 def get_image_embeddings(pipe: StableDiffusionPipeline, image: Image):
-    img_512 = np.array(image.resize((512, 512), resample=Image.BILINEAR))
-    img_tensor = torch.from_numpy(img_512).float().permute(2, 0, 1) / 127.5 - 1
-    img_tensor = img_tensor.unsqueeze(0).to(pipe.device, dtype=pipe.dtype)
+    img_tensor = pipe.image_processor.preprocess(image, 512, 512)
+    img_tensor = img_tensor.to(pipe.device, dtype=pipe.dtype)
     return pipe.vae.encode(img_tensor)["latent_dist"].mean * pipe.vae.scaling_factor
-
-
-@torch.inference_mode()
-def denormalize(image):
-    image = (image / 2 + 0.5).clamp(0, 1)
-    image = image.cpu().permute(0, 2, 3, 1).numpy()
-    image = (image * 255).astype(np.uint8)
-    return image[0]
-
-
-@torch.inference_mode()
-def decode(latent: T, pipe: StableDiffusionPipeline, im_cat: TN = None):
-    scaling_factor = pipe.vae.scaling_factor
-    image = pipe.vae.decode((1 / scaling_factor) * latent, return_dict=False)[0]
-    image = denormalize(image)
-    if im_cat is not None:
-        image = np.concatenate((im_cat, image), axis=1)
-    return Image.fromarray(image)
 
 
 def init_pipe(device, dtype, unet, scheduler) -> Tuple[UNet2DConditionModel, T, T]:

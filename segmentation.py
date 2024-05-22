@@ -7,7 +7,7 @@ from collections import defaultdict
 import cv2
 import torch
 import torch.nn.functional as F
-from diffusers import StableDiffusionPipeline
+from diffusers import DiffusionPipeline
 from omegaconf import OmegaConf
 from tqdm import tqdm
 from transformers import BlipForConditionalGeneration, BlipProcessor
@@ -63,18 +63,30 @@ if __name__ == "__main__":
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
     )
-    pipeline = StableDiffusionPipeline.from_pretrained(
-        config.diffusion.path, torch_dtype=diffusion_dtype
+    pipe = DiffusionPipeline.from_pretrained(
+        config.diffusion.variant,
+        torch_dtype=diffusion_dtype,
+        use_safetensors=True,
+        cache_dir=config.cache_dir,
     ).to(diffusion_device)
+    pipe.image_processor.resample = "bilinear"
     controller = AttentionStore()
-    register_attention_control(pipeline, controller, config)
-    embedding_null = get_text_embeddings(pipeline, "")
+    register_attention_control(pipe, controller, config)
+    embedding_null = get_text_embeddings(pipe, "")
 
     if config.use_blip:
         blip_device = torch.device(config.blip.device)
-        blip_processor = BlipProcessor.from_pretrained(config.blip.path)
-        blip_model = BlipForConditionalGeneration.from_pretrained(config.blip.path)
-        blip_model.to(blip_device)
+        blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
+        blip_processor = BlipProcessor.from_pretrained(
+            config.blip.variant, cache_dir=config.cache_dir
+        )
+        blip_model = BlipForConditionalGeneration.from_pretrained(
+            config.blip.variant,
+            torch_dtype=blip_dtype,
+            use_safetensors=True,
+            cache_dir=config.cache_dir,
+        ).to(blip_device)
+        blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
@@ -83,13 +95,13 @@ if __name__ == "__main__":
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
         labels = torch.where(label)[0].tolist()
-        z_source = get_image_embeddings(pipeline, img)
+        z_source = get_image_embeddings(pipe, img)
 
         # generate mask for each label in the image
         for cls_idx in labels:
             # 1. generate text prompts
             cls_name = category[cls_idx]
-            cls_name_len = len(pipeline.tokenizer.encode(cls_name)) - 2
+            cls_name_len = len(pipe.tokenizer.encode(cls_name)) - 2
             pos = [4 + i for i in range(cls_name_len)]
             text_source = f"a photograph of {cls_name}."
             text_target = f"a photograph of ''."
@@ -129,15 +141,15 @@ if __name__ == "__main__":
 
             # 2. get image and text embeddings
             z_target = z_source.clone()
-            embedding_source = get_text_embeddings(pipeline, text_source)
+            embedding_source = get_text_embeddings(pipe, text_source)
             embedding_source = torch.stack([embedding_null, embedding_source], dim=1)
-            embedding_target = get_text_embeddings(pipeline, text_target)
+            embedding_target = get_text_embeddings(pipe, text_target)
             embedding_target = torch.stack([embedding_null, embedding_target], dim=1)
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()
             z_target, time_to_eps = image_optimization(
-                pipeline,
+                pipe,
                 z_source,
                 z_target,
                 embedding_source,
@@ -152,7 +164,7 @@ if __name__ == "__main__":
                     time_to_eps = defaultdict(lambda: None)
                 controller.reset()
                 image_optimization(
-                    pipeline,
+                    pipe,
                     z_source,
                     z_target,
                     embedding_source,

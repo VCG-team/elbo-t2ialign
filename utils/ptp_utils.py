@@ -90,7 +90,7 @@ class AttentionStore(AttentionControl):
 
 
 def register_attention_control(
-    pipeline: StableDiffusionPipeline,
+    pipe: StableDiffusionPipeline,
     controller: AttentionStore,
     config: DictConfig,
 ):
@@ -162,7 +162,7 @@ def register_attention_control(
         return count
 
     cross_att_count = 0
-    sub_nets = pipeline.unet.named_children()
+    sub_nets = pipe.unet.named_children()
     for net in sub_nets:
         if "down" in net[0]:
             cross_att_count += register_recr(net[1], 0, "down")
