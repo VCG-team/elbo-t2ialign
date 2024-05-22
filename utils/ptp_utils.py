@@ -98,16 +98,12 @@ def register_attention_control(
         to_out = self.to_out
         if type(to_out) is torch.nn.modules.container.ModuleList:
             to_out = self.to_out[0]
-        else:
-            to_out = self.to_out
 
         def forward(hidden_states, encoder_hidden_states=None, attention_mask=None):
             # keep variable name with original code(prompt-to-prompt)
             x = hidden_states
             context = encoder_hidden_states
-            mask = attention_mask
 
-            batch_size = len(x)
             h = self.heads
             is_cross = context is not None
             context = context if is_cross else x
@@ -119,31 +115,24 @@ def register_attention_control(
             )
             sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
 
-            if mask is not None:
-                mask = mask.reshape(batch_size, -1)
-                max_neg_value = -torch.finfo(sim.dtype).max
-                mask = mask[:, None, :].repeat(h, 1, 1)
-                sim.masked_fill_(~mask, max_neg_value)
-
             # attention, what we cannot get enough of
             attn = sim.softmax(dim=-1, dtype=sim.dtype)
 
-            # for stable diffusion v1.5 series, attention heads = 8
-            # and in dds loss, attn uses batched input(batch size = 4)
+            # in dds loss, attn uses batched input(batch size = 4)
             # so x[0] is null text and source img, x[1] is null text and target img
             # x[2] is source text and source img, x[3] is target text and target img
             if is_cross:
-                source_x = x[2] + config.target_factor * (x[2] - x[3])
-                source_q = self.to_q(source_x.unsqueeze(0))
-                source_q = rearrange(source_q, "b n (h d) -> (b h) n d", h=h)
-                source_k = k[16:24]
-                sim = torch.einsum("b i d, b j d -> b i j", source_q, source_k)
-                source_att = (sim * self.scale).softmax(dim=-1, dtype=sim.dtype)
-                # save cross attention between source text and source img(take mean for 8 attention heads)
-                controller(source_att.mean(0), is_cross, place_in_unet)
+                mixed_x = x[2] + config.target_factor * (x[2] - x[3])
+                mixed_q = self.to_q(mixed_x.unsqueeze(0))
+                mixed_q = rearrange(mixed_q, "b n (h d) -> (b h) n d", h=h)
+                source_k = k[2 * h : 3 * h]
+                sim = torch.einsum("b i d, b j d -> b i j", mixed_q, source_k)
+                mixed_att = (sim * self.scale).softmax(dim=-1, dtype=sim.dtype)
+                # save cross attention between source text and mixed img(take mean for all attention heads)
+                controller(mixed_att.mean(0), is_cross, place_in_unet)
             else:
-                source_att = attn[16:24]
-                # save self attention of source img(take mean for 8 attention heads)
+                source_att = attn[2 * h : 3 * h]
+                # save self attention of source img(take mean for all attention heads)
                 controller(source_att.mean(0), is_cross, place_in_unet)
 
             out = torch.einsum("b i j, b j d -> b i d", attn, v)

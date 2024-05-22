@@ -4,7 +4,7 @@ from typing import DefaultDict, List, Optional, Tuple, Union
 
 import torch
 from compel import Compel
-from diffusers import StableDiffusionPipeline, UNet2DConditionModel
+from diffusers import DiffusionPipeline, UNet2DConditionModel
 from omegaconf import DictConfig
 from PIL import Image
 from torch.optim.sgd import SGD
@@ -15,15 +15,16 @@ TS = Union[Tuple[T, ...], List[T]]
 
 
 @torch.inference_mode()
-def get_text_embeddings(pipe: StableDiffusionPipeline, text: str) -> T:
+def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> T:
     compel_proc = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
     embeddings = compel_proc(text)
     return embeddings
 
 
 @torch.inference_mode()
-def get_image_embeddings(pipe: StableDiffusionPipeline, image: Image):
-    img_tensor = pipe.image_processor.preprocess(image, 512, 512)
+def get_image_embeddings(pipe: DiffusionPipeline, image: Image):
+    size = pipe.vae.config.sample_size
+    img_tensor = pipe.image_processor.preprocess(image, size, size)
     img_tensor = img_tensor.to(pipe.device, dtype=pipe.dtype)
     return pipe.vae.encode(img_tensor)["latent_dist"].mean * pipe.vae.scaling_factor
 
@@ -48,7 +49,7 @@ class DDSLoss:
 
     def __init__(
         self,
-        pipe: StableDiffusionPipeline,
+        pipe: DiffusionPipeline,
         alpha_exp=0,
         sigma_exp=0,
     ):
@@ -242,7 +243,7 @@ class DDSLoss:
 
 
 def image_optimization(
-    pipe: StableDiffusionPipeline,
+    pipe: DiffusionPipeline,
     z_source: T,
     z_target: T,
     embedding_source: T,
