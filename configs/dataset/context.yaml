@@ -1,6 +1,6 @@
 # metainfo for context dataset
 dataset: "context"
-data_root: "./VOCdevkit/VOC2010"
+data_root: "./datasets/VOCdevkit/VOC2010"
 data_name_list: "./data/context/val_id.txt"
 name_to_cls_labels: "./data/context/cls_labels.npy"
 # we follow mmsegmentation to prepare dataset.

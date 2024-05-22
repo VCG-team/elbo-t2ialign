@@ -1,6 +1,6 @@
 # metainfo for coco dataset
 dataset: "coco"
-data_root: "./coco_stuff164k"
+data_root: "./datasets/coco_stuff164k"
 data_name_list: "./data/coco/val_id.txt"
 name_to_cls_labels: "./data/coco/cls_labels.npy"
 # we follow mmsegmentation to prepare dataset.

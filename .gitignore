@@ -6,11 +6,10 @@
 **/__MACOSX/
 
 # dataset
-VOCdevkit
-COCO2014
-COCO2017
-coco_stuff10k
-coco_stuff164k
+datasets
+
+# model
+models
 
 # output
 output

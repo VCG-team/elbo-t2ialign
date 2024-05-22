@@ -84,7 +84,7 @@ class DDSLoss:
         self.unet, self.alphas, self.sigmas = init_pipe(
             pipe.device, pipe.dtype, pipe.unet, pipe.scheduler
         )
-        self.prediction_type = pipe.scheduler.prediction_type
+        self.prediction_type = pipe.scheduler.config.prediction_type
 
     def noise_input(self, z: T, eps: TN = None, timestep: Optional[int] = None):
         batch_size = z.shape[0]

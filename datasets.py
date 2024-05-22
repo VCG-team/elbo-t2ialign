@@ -30,7 +30,7 @@ class VOC12Dataset(Dataset):
     def __init__(
         self,
         img_name_list_path="./data/voc/val_id.txt",
-        voc12_root="./VOCdevkit/VOC2012",
+        voc12_root="./datasets/VOCdevkit/VOC2012",
         label_file_path="./data/voc/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
@@ -56,7 +56,7 @@ class VOCContextDataset(Dataset):
     def __init__(
         self,
         img_name_list_path="./data/context/val_id.txt",
-        voc10_root="./VOCdevkit/VOC2010",
+        voc10_root="./datasets/VOCdevkit/VOC2010",
         label_file_path="./data/context/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
@@ -82,7 +82,7 @@ class COCOClsDataset(Dataset):
     def __init__(
         self,
         img_name_list_path="./data/coco/val_id.txt",
-        coco_root="./coco_stuff164k",
+        coco_root="./datasets/coco_stuff164k",
         label_file_path="./data/coco/cls_labels.npy",
     ):
         self.img_name_list = load_img_name_list(img_name_list_path)
