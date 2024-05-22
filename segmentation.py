@@ -69,7 +69,7 @@ if __name__ == "__main__":
         use_safetensors=True,
         cache_dir=config.cache_dir,
     ).to(diffusion_device)
-    pipe.image_processor.resample = "bilinear"
+    pipe.image_processor.config.resample = "bilinear"
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
     embedding_null = get_text_embeddings(pipe, "")
