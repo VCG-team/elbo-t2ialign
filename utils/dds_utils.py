@@ -81,14 +81,14 @@ class DDSLoss:
         self.unet, self.alphas, self.sigmas = init_pipe(
             pipe.device, pipe.dtype, pipe.unet, pipe.scheduler
         )
-        self.prediction_type = pipe.scheduler.config.prediction_type
 
+    @torch.inference_mode()
     def noise_input(self, z: T, eps: TN = None, timestep: Optional[int] = None):
         batch_size = z.shape[0]
         if timestep is None:
             t = torch.randint(
                 low=self.t_min,
-                high=min(self.t_max, 1000) - 1,  # avoid the highest timestep.
+                high=min(self.t_max, 1000) - 1,  # avoid the highest timestep
                 size=(batch_size,),
                 device=z.device,
                 dtype=torch.long,
@@ -104,152 +104,97 @@ class DDSLoss:
         z_t = alpha_t * z + sigma_t * eps
         return z_t, eps, t, alpha_t, sigma_t
 
+    @torch.inference_mode()
     def get_eps_prediction(
         self,
-        z_t: T,
-        timesteps: T,
-        text_embs: T,
-        alpha_t: T,
-        sigma_t: T,
+        z_t_source: T,
+        z_t_target: T,
+        timestep: T,
+        text_emb_source: Tuple[T, TN],
+        text_emb_target: Tuple[T, TN],
+        text_emb_negative: Tuple[T, TN],
+        add_time_ids: TN,
         guidance_scale: float,
     ):
+        # prepare inputs
+        cond_source, pooled_source = text_emb_source
+        cond_target, pooled_target = text_emb_target
+        cond_negative, pooled_negative = text_emb_negative
+        z_t = torch.cat([z_t_source, z_t_target] * 2)
+        timesteps = torch.cat([timestep] * 4)
+        cond = torch.cat(
+            [
+                cond_negative,
+                cond_negative,
+                cond_source,
+                cond_target,
+            ]
+        )
+        added_cond_kwargs = None
+        # for SDXL, added_cond_kwargs is required
+        if pooled_source:
+            add_text_embeds = torch.cat(
+                [
+                    pooled_negative,
+                    pooled_negative,
+                    pooled_source,
+                    pooled_target,
+                ]
+            )
+            add_time_ids = torch.cat([add_time_ids] * 4)
+            added_cond_kwargs = {
+                "text_embeds": add_text_embeds,
+                "time_ids": add_time_ids,
+            }
+        # forward and do classifier free guidance
         with torch.autocast(device_type="cuda", dtype=torch.float16):
-            e_t = self.unet(z_t, timesteps, text_embs).sample
-            if self.prediction_type == "v_prediction":
-                e_t = alpha_t * e_t + sigma_t * z_t
+            e_t = self.unet(
+                z_t,
+                timesteps,
+                encoder_hidden_states=cond,
+                added_cond_kwargs=added_cond_kwargs,
+            ).sample
             e_t_uncond, e_t = e_t.chunk(2)
             e_t = e_t_uncond + guidance_scale * (e_t - e_t_uncond)
             assert torch.isfinite(e_t).all()
-        return e_t
+        # return eps_pred_source and eps_pred_target
+        return e_t.chunk(2)
 
-    def get_sds_loss(
+    def get_loss(
         self,
         z_target: T,
-        text_emb_target: T,
-        text_emb_negative: T,
-        guidance_scale: float,
-        eps: TN = None,
+        alpha_t: T,
+        sigma_t: T,
+        eps_pred_source: T,
+        eps_pred_target: T,
+        eps: T,
+        loss_type: str,
         mask: TN = None,
-        timestep: Optional[int] = None,
-        return_eps=False,
     ) -> TS:
-        with torch.inference_mode():
-            z_t_target, eps, t, alpha_t, sigma_t = self.noise_input(
-                z_target, eps=eps, timestep=timestep
-            )
-            eps_pred_target = self.get_eps_prediction(
-                torch.cat([z_t_target] * 2),
-                torch.cat([t] * 2),
-                torch.cat([text_emb_negative, text_emb_target]),
-                torch.cat([alpha_t] * 2),
-                torch.cat([sigma_t] * 2),
-                guidance_scale,
-            )
-            grad = (
-                (alpha_t**self.alpha_exp)
-                * (sigma_t**self.sigma_exp)
-                * (eps_pred_target - eps)
-            )
-            if mask is not None:
-                grad = grad * mask
-            log_loss = (grad**2).mean()
+        grad_coef = (alpha_t**self.alpha_exp) * (sigma_t**self.sigma_exp)
+        if loss_type == "sds":
+            grad = eps_pred_target - eps
+        elif loss_type == "dds":
+            grad = eps_pred_target - eps_pred_source
+        else:
+            raise ValueError(f"Invalid loss type: {loss_type}")
+        grad = grad_coef * grad
+        if mask is not None:
+            grad = grad * mask
+        log_loss = (grad**2).mean()
         loss = z_target * grad.clone()
         loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
-
-        if return_eps:
-            return loss, log_loss, eps
         return loss, log_loss
-
-    def get_dds_loss(
-        self,
-        z_source: T,
-        z_target: T,
-        text_emb_source: T,
-        text_emb_target: T,
-        text_emb_negative: T,
-        guidance_scale: float,
-        eps: TN = None,
-        timestep: Optional[int] = None,
-        return_eps=False,
-    ) -> TS:
-        with torch.inference_mode():
-            z_t_source, eps, t, alpha_t, sigma_t = self.noise_input(
-                z_source, eps, timestep
-            )
-            z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
-            eps_pred = self.get_eps_prediction(
-                torch.cat([z_t_source, z_t_target] * 2),
-                torch.cat([t] * 4),
-                torch.cat(
-                    [
-                        text_emb_negative,
-                        text_emb_negative,
-                        text_emb_source,
-                        text_emb_target,
-                    ]
-                ),
-                torch.cat([alpha_t] * 4),
-                torch.cat([sigma_t] * 4),
-                guidance_scale,
-            )
-            eps_pred_source, eps_pred_target = eps_pred.chunk(2)
-            grad = (
-                (alpha_t**self.alpha_exp)
-                * (sigma_t**self.sigma_exp)
-                * (eps_pred_target - eps_pred_source)
-            )
-            log_loss = (grad**2).mean()
-        loss = z_target * grad.clone()
-        loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
-
-        if return_eps:
-            return loss, log_loss, eps
-        return loss, log_loss
-
-    def get_none_loss(
-        self,
-        z_source: T,
-        z_target: T,
-        text_emb_source: T,
-        text_emb_target: T,
-        text_emb_negative: T,
-        guidance_scale: float,
-        eps: TN = None,
-        timestep: Optional[int] = None,
-        return_eps=False,
-    ):
-        with torch.inference_mode():
-            z_t_source, eps, t, alpha_t, sigma_t = self.noise_input(
-                z_source, eps, timestep
-            )
-            z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
-            _ = self.get_eps_prediction(
-                torch.cat([z_t_source, z_t_target] * 2),
-                torch.cat([t] * 4),
-                torch.cat(
-                    [
-                        text_emb_negative,
-                        text_emb_negative,
-                        text_emb_source,
-                        text_emb_target,
-                    ]
-                ),
-                torch.cat([alpha_t] * 4),
-                torch.cat([sigma_t] * 4),
-                guidance_scale,
-            )
-        if return_eps:
-            return 0, 0, eps
-        return 0, 0
 
 
 def image_optimization(
     pipe: DiffusionPipeline,
     z_source: T,
     z_target: T,
-    text_emb_source: T,
-    text_emb_target: T,
-    text_emb_negative: T,
+    text_emb_source: Tuple[T, TN],
+    text_emb_target: Tuple[T, TN],
+    text_emb_negative: Tuple[T, TN],
+    add_time_ids: TN,
     loss_type: str,
     timesteps: List[int],
     time_to_eps: DefaultDict[int, TN],
@@ -257,6 +202,8 @@ def image_optimization(
 ) -> Tuple[T, DefaultDict[int, TN]]:
     dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
     time_to_eps_return = defaultdict(lambda: None)
+    z_target.requires_grad = True
+    optimizer = SGD(params=[z_target], lr=config.lr)
     if config.guidance_scale is not None:
         guidance_scale = config.guidance_scale
     elif isinstance(pipe, StableDiffusionPipeline):
@@ -264,53 +211,35 @@ def image_optimization(
     else:
         guidance_scale = 5.0
 
-    if loss_type == "none":
-        for t in timesteps:
-            _, _, eps = dds_loss.get_none_loss(
-                z_source,
-                z_target,
-                text_emb_source,
-                text_emb_target,
-                text_emb_negative,
-                guidance_scale,
-                eps=time_to_eps[t],
-                timestep=t,
-                return_eps=True,
-            )
-            time_to_eps_return[t] = eps
-        return z_target, time_to_eps_return
-
-    z_target.requires_grad = True
-    optimizer = SGD(params=[z_target], lr=config.lr)
-
-    for t in timesteps:
-        if loss_type == "dds":
-            loss, _, eps = dds_loss.get_dds_loss(
-                z_source,
-                z_target,
-                text_emb_source,
-                text_emb_target,
-                text_emb_negative,
-                guidance_scale,
-                eps=time_to_eps[t],
-                timestep=t,
-                return_eps=True,
-            )
-        elif loss_type == "sds":
-            loss, _, eps = dds_loss.get_sds_loss(
-                z_target,
-                text_emb_target,
-                text_emb_negative,
-                guidance_scale,
-                eps=time_to_eps[t],
-                timestep=t,
-                return_eps=True,
-            )
-        else:
-            raise ValueError(f"Invalid loss type: {loss_type}")
+    for timestep in timesteps:
+        z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+            z_source, time_to_eps[timestep], timestep
+        )
+        z_t_target, _, _, _, _ = dds_loss.noise_input(z_target, eps, timestep)
+        time_to_eps_return[timestep] = eps
+        eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
+            z_t_source,
+            z_t_target,
+            t,
+            text_emb_source,
+            text_emb_target,
+            text_emb_negative,
+            add_time_ids,
+            guidance_scale,
+        )
+        if loss_type == "none":
+            continue
+        loss, _ = dds_loss.get_loss(
+            z_target,
+            alpha_t,
+            sigma_t,
+            eps_pred_source,
+            eps_pred_target,
+            eps,
+            loss_type,
+        )
         optimizer.zero_grad()
         (config.loss_factor * loss).backward()
         optimizer.step()
-        time_to_eps_return[t] = eps
 
     return z_target, time_to_eps_return

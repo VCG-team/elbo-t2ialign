@@ -73,17 +73,17 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
-    embed_negative, pooled_embed_negative = get_text_embeddings(pipe, "")
-    # check if the model is SDXL architecture
-    is_sdxl = pooled_embed_negative is not None
-    if is_sdxl:
+    text_emb_negative = get_text_embeddings(pipe, "")
+    # if the model is SDXL architecture, get add_time_ids
+    add_time_ids = None
+    if text_emb_negative[1] is not None:
         text_encoder_projection_dim = pipe.text_encoder_2.config.projection_dim
         size = pipe.vae.config.sample_size
         add_time_ids = pipe._get_add_time_ids(
             (size, size),
             (0, 0),
             (size, size),
-            dtype=embed_negative.dtype,
+            dtype=text_emb_negative[1].dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
         )
 
@@ -152,10 +152,10 @@ if __name__ == "__main__":
                     + "."
                 )
 
-            # 2. get image and text embeddings
+            # 2. get text and target image embeddings
+            text_emb_source = get_text_embeddings(pipe, text_source)
+            text_emb_target = get_text_embeddings(pipe, text_target)
             z_target = z_source.clone()
-            embed_source, pooled_embed_source = get_text_embeddings(pipe, text_source)
-            embed_target, pooled_embed_target = get_text_embeddings(pipe, text_target)
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()
@@ -163,9 +163,10 @@ if __name__ == "__main__":
                 pipe,
                 z_source,
                 z_target,
-                embed_source,
-                embed_target,
-                embed_negative,
+                text_emb_source,
+                text_emb_target,
+                text_emb_negative,
+                add_time_ids,
                 config.loss_type,
                 config.optimize_timesteps,
                 defaultdict(lambda: None),
@@ -179,9 +180,10 @@ if __name__ == "__main__":
                     pipe,
                     z_source,
                     z_target,
-                    embed_source,
-                    embed_target,
-                    embed_negative,
+                    text_emb_source,
+                    text_emb_target,
+                    text_emb_negative,
+                    add_time_ids,
                     "none",
                     config.collect_timesteps,
                     time_to_eps,
