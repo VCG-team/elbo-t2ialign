@@ -26,6 +26,6 @@ optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
 loss_type: "dds" # loss function, "dds" or "sds" or "none"
 loss_factor: 2000.0 # coefficient of loss
 lr: 1.0e-1 # learning rate
-guidance_scale: 7.5
+guidance_scale: null # null or float, if null, use the default value of pipeline
 alpha_exp: 0.0
 sigma_exp: 0.0

@@ -74,10 +74,9 @@ class DDSLoss:
             return
         DDSLoss.init_flag = True
         self.t_min = 50
-        self.t_max = 200
+        self.t_max = 950
         self.alpha_exp = alpha_exp
         self.sigma_exp = sigma_exp
-        self.rescale = 1
         self.dtype = pipe.dtype
         self.unet, self.alphas, self.sigmas = init_pipe(
             pipe.device, pipe.dtype, pipe.unet, pipe.scheduler
@@ -108,70 +107,58 @@ class DDSLoss:
     def get_eps_prediction(
         self,
         z_t: T,
-        timestep: T,
-        text_embeddings: T,
+        timesteps: T,
+        text_embs: T,
         alpha_t: T,
         sigma_t: T,
-        get_raw=False,
-        guidance_scale=7.5,
+        guidance_scale: float,
     ):
-
-        latent_input = torch.cat([z_t] * 2)
-        timestep = torch.cat([timestep] * 2)
-        embedd = text_embeddings.permute(1, 0, 2, 3).reshape(
-            -1, *text_embeddings.shape[2:]
-        )
         with torch.autocast(device_type="cuda", dtype=torch.float16):
-            e_t = self.unet(latent_input, timestep, embedd).sample
+            e_t = self.unet(z_t, timesteps, text_embs).sample
             if self.prediction_type == "v_prediction":
-                e_t = (
-                    torch.cat([alpha_t] * 2) * e_t
-                    + torch.cat([sigma_t] * 2) * latent_input
-                )
+                e_t = alpha_t * e_t + sigma_t * z_t
             e_t_uncond, e_t = e_t.chunk(2)
-            if get_raw:
-                return e_t_uncond, e_t
             e_t = e_t_uncond + guidance_scale * (e_t - e_t_uncond)
             assert torch.isfinite(e_t).all()
-        if get_raw:
-            return e_t
-        pred_z0 = (z_t - sigma_t * e_t) / alpha_t
-        return e_t, pred_z0
+        return e_t
 
     def get_sds_loss(
         self,
-        z: T,
-        text_embeddings: T,
+        z_target: T,
+        text_emb_target: T,
+        text_emb_negative: T,
+        guidance_scale: float,
         eps: TN = None,
-        mask=None,
+        mask: TN = None,
         timestep: Optional[int] = None,
-        guidance_scale=7.5,
         return_eps=False,
     ) -> TS:
         with torch.inference_mode():
-            z_t, eps, t, alpha_t, sigma_t = self.noise_input(
-                z, eps=eps, timestep=timestep
+            z_t_target, eps, t, alpha_t, sigma_t = self.noise_input(
+                z_target, eps=eps, timestep=timestep
             )
-            # text_emb input shape: (1, 2, num_token, emb_dim), 2nd dim is for uncond/cond
-            e_t, _ = self.get_eps_prediction(
-                z_t,
-                t,
-                text_embeddings,
-                alpha_t,
-                sigma_t,
-                guidance_scale=guidance_scale,
+            eps_pred_target = self.get_eps_prediction(
+                torch.cat([z_t_target] * 2),
+                torch.cat([t] * 2),
+                torch.cat([text_emb_negative, text_emb_target]),
+                torch.cat([alpha_t] * 2),
+                torch.cat([sigma_t] * 2),
+                guidance_scale,
             )
-            grad_z = (alpha_t**self.alpha_exp) * (sigma_t**self.sigma_exp) * (e_t - eps)
-            assert torch.isfinite(grad_z).all()
-            grad_z = torch.nan_to_num(grad_z.detach(), 0.0, 0.0, 0.0)
+            grad = (
+                (alpha_t**self.alpha_exp)
+                * (sigma_t**self.sigma_exp)
+                * (eps_pred_target - eps)
+            )
             if mask is not None:
-                grad_z = grad_z * mask
-            log_loss = (grad_z**2).mean()
-        sds_loss = grad_z.clone() * z
-        del grad_z
+                grad = grad * mask
+            log_loss = (grad**2).mean()
+        loss = z_target * grad.clone()
+        loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
+
         if return_eps:
-            return sds_loss.sum() / (z.shape[2] * z.shape[3]), log_loss, eps
-        return sds_loss.sum() / (z.shape[2] * z.shape[3]), log_loss
+            return loss, log_loss, eps
+        return loss, log_loss
 
     def get_dds_loss(
         self,
@@ -179,12 +166,10 @@ class DDSLoss:
         z_target: T,
         text_emb_source: T,
         text_emb_target: T,
+        text_emb_negative: T,
+        guidance_scale: float,
         eps: TN = None,
-        reduction="mean",
-        symmetric: bool = False,
         timestep: Optional[int] = None,
-        guidance_scale=7.5,
-        raw_log=False,
         return_eps=False,
     ) -> TS:
         with torch.inference_mode():
@@ -192,14 +177,20 @@ class DDSLoss:
                 z_source, eps, timestep
             )
             z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
-            # text_emb shape after torch.cat: (2, 2, num_token, emb_dim), 1st dim is for source/target, 2nd dim is for uncond/cond
-            eps_pred, _ = self.get_eps_prediction(
-                torch.cat((z_t_source, z_t_target)),
-                torch.cat((t, t)),
-                torch.cat((text_emb_source, text_emb_target)),
-                torch.cat((alpha_t, alpha_t)),
-                torch.cat((sigma_t, sigma_t)),
-                guidance_scale=guidance_scale,
+            eps_pred = self.get_eps_prediction(
+                torch.cat([z_t_source, z_t_target] * 2),
+                torch.cat([t] * 4),
+                torch.cat(
+                    [
+                        text_emb_negative,
+                        text_emb_negative,
+                        text_emb_source,
+                        text_emb_target,
+                    ]
+                ),
+                torch.cat([alpha_t] * 4),
+                torch.cat([sigma_t] * 4),
+                guidance_scale,
             )
             eps_pred_source, eps_pred_target = eps_pred.chunk(2)
             grad = (
@@ -207,26 +198,12 @@ class DDSLoss:
                 * (sigma_t**self.sigma_exp)
                 * (eps_pred_target - eps_pred_source)
             )
-            if raw_log:
-                log_loss = (
-                    eps.detach().cpu(),
-                    eps_pred_target.detach().cpu(),
-                    eps_pred_source.detach().cpu(),
-                )
-            else:
-                log_loss = (grad**2).mean()
+            log_loss = (grad**2).mean()
         loss = z_target * grad.clone()
-
-        if symmetric:
-            loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
-            loss_symm = self.rescale * z_source * (-grad.clone())
-            loss += loss_symm.sum() / (z_target.shape[2] * z_target.shape[3])
-        elif reduction == "mean":
-            loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
+        loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
 
         if return_eps:
             return loss, log_loss, eps
-
         return loss, log_loss
 
     def get_none_loss(
@@ -235,9 +212,10 @@ class DDSLoss:
         z_target: T,
         text_emb_source: T,
         text_emb_target: T,
+        text_emb_negative: T,
+        guidance_scale: float,
         eps: TN = None,
         timestep: Optional[int] = None,
-        guidance_scale=7.5,
         return_eps=False,
     ):
         with torch.inference_mode():
@@ -245,14 +223,20 @@ class DDSLoss:
                 z_source, eps, timestep
             )
             z_t_target, _, _, _, _ = self.noise_input(z_target, eps, timestep)
-            # text_emb shape after torch.cat: (2, 2, num_token, emb_dim), 1st dim is for source/target, 2nd dim is for uncond/cond
-            _, _ = self.get_eps_prediction(
-                torch.cat((z_t_source, z_t_target)),
-                torch.cat((t, t)),
-                torch.cat((text_emb_source, text_emb_target)),
-                torch.cat((alpha_t, alpha_t)),
-                torch.cat((sigma_t, sigma_t)),
-                guidance_scale=guidance_scale,
+            _ = self.get_eps_prediction(
+                torch.cat([z_t_source, z_t_target] * 2),
+                torch.cat([t] * 4),
+                torch.cat(
+                    [
+                        text_emb_negative,
+                        text_emb_negative,
+                        text_emb_source,
+                        text_emb_target,
+                    ]
+                ),
+                torch.cat([alpha_t] * 4),
+                torch.cat([sigma_t] * 4),
+                guidance_scale,
             )
         if return_eps:
             return 0, 0, eps
@@ -263,8 +247,9 @@ def image_optimization(
     pipe: DiffusionPipeline,
     z_source: T,
     z_target: T,
-    embedding_source: T,
-    embedding_target: T,
+    text_emb_source: T,
+    text_emb_target: T,
+    text_emb_negative: T,
     loss_type: str,
     timesteps: List[int],
     time_to_eps: DefaultDict[int, TN],
@@ -272,17 +257,24 @@ def image_optimization(
 ) -> Tuple[T, DefaultDict[int, TN]]:
     dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
     time_to_eps_return = defaultdict(lambda: None)
+    if config.guidance_scale is not None:
+        guidance_scale = config.guidance_scale
+    elif isinstance(pipe, StableDiffusionPipeline):
+        guidance_scale = 7.5
+    else:
+        guidance_scale = 5.0
 
     if loss_type == "none":
         for t in timesteps:
             _, _, eps = dds_loss.get_none_loss(
                 z_source,
                 z_target,
-                embedding_source,
-                embedding_target,
+                text_emb_source,
+                text_emb_target,
+                text_emb_negative,
+                guidance_scale,
                 eps=time_to_eps[t],
                 timestep=t,
-                guidance_scale=config.guidance_scale,
                 return_eps=True,
             )
             time_to_eps_return[t] = eps
@@ -296,20 +288,22 @@ def image_optimization(
             loss, _, eps = dds_loss.get_dds_loss(
                 z_source,
                 z_target,
-                embedding_source,
-                embedding_target,
+                text_emb_source,
+                text_emb_target,
+                text_emb_negative,
+                guidance_scale,
                 eps=time_to_eps[t],
                 timestep=t,
-                guidance_scale=config.guidance_scale,
                 return_eps=True,
             )
         elif loss_type == "sds":
             loss, _, eps = dds_loss.get_sds_loss(
                 z_target,
-                embedding_target,
+                text_emb_target,
+                text_emb_negative,
+                guidance_scale,
                 eps=time_to_eps[t],
                 timestep=t,
-                guidance_scale=config.guidance_scale,
                 return_eps=True,
             )
         else:

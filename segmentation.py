@@ -155,9 +155,7 @@ if __name__ == "__main__":
             # 2. get image and text embeddings
             z_target = z_source.clone()
             embed_source, pooled_embed_source = get_text_embeddings(pipe, text_source)
-            embed_source = torch.stack([embed_negative, embed_source], dim=1)
             embed_target, pooled_embed_target = get_text_embeddings(pipe, text_target)
-            embed_target = torch.stack([embed_negative, embed_target], dim=1)
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()
@@ -167,6 +165,7 @@ if __name__ == "__main__":
                 z_target,
                 embed_source,
                 embed_target,
+                embed_negative,
                 config.loss_type,
                 config.optimize_timesteps,
                 defaultdict(lambda: None),
@@ -182,6 +181,7 @@ if __name__ == "__main__":
                     z_target,
                     embed_source,
                     embed_target,
+                    embed_negative,
                     "none",
                     config.collect_timesteps,
                     time_to_eps,
