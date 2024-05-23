@@ -72,7 +72,20 @@ if __name__ == "__main__":
     pipe.image_processor.config.resample = "bilinear"
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
-    embedding_negative = get_text_embeddings(pipe, "")
+
+    embed_negative, pooled_embed_negative = get_text_embeddings(pipe, "")
+    # check if the model is SDXL architecture
+    is_sdxl = pooled_embed_negative is not None
+    if is_sdxl:
+        text_encoder_projection_dim = pipe.text_encoder_2.config.projection_dim
+        size = pipe.vae.config.sample_size
+        add_time_ids = pipe._get_add_time_ids(
+            (size, size),
+            (0, 0),
+            (size, size),
+            dtype=embed_negative.dtype,
+            text_encoder_projection_dim=text_encoder_projection_dim,
+        )
 
     if config.use_blip:
         blip_device = torch.device(config.blip.device)
@@ -141,14 +154,10 @@ if __name__ == "__main__":
 
             # 2. get image and text embeddings
             z_target = z_source.clone()
-            embedding_source = get_text_embeddings(pipe, text_source)
-            embedding_source = torch.stack(
-                [embedding_negative, embedding_source], dim=1
-            )
-            embedding_target = get_text_embeddings(pipe, text_target)
-            embedding_target = torch.stack(
-                [embedding_negative, embedding_target], dim=1
-            )
+            embed_source, pooled_embed_source = get_text_embeddings(pipe, text_source)
+            embed_source = torch.stack([embed_negative, embed_source], dim=1)
+            embed_target, pooled_embed_target = get_text_embeddings(pipe, text_target)
+            embed_target = torch.stack([embed_negative, embed_target], dim=1)
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()
@@ -156,8 +165,8 @@ if __name__ == "__main__":
                 pipe,
                 z_source,
                 z_target,
-                embedding_source,
-                embedding_target,
+                embed_source,
+                embed_target,
                 config.loss_type,
                 config.optimize_timesteps,
                 defaultdict(lambda: None),
@@ -171,8 +180,8 @@ if __name__ == "__main__":
                     pipe,
                     z_source,
                     z_target,
-                    embedding_source,
-                    embedding_target,
+                    embed_source,
+                    embed_target,
                     "none",
                     config.collect_timesteps,
                     time_to_eps,

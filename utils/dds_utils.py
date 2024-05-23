@@ -20,11 +20,12 @@ TS = Union[Tuple[T, ...], List[T]]
 
 
 @torch.inference_mode()
-def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> T:
+def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
     # use compel to do prompt weighting
     # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
     if isinstance(pipe, StableDiffusionPipeline):
         compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
+        return compel(text), None
     elif isinstance(pipe, StableDiffusionXLPipeline):
         compel = Compel(
             tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
@@ -32,9 +33,9 @@ def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> T:
             returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
             requires_pooled=[False, True],
         )
+        return compel(text)
     else:
         raise ValueError(f"Invalid pipeline type: {type(pipe)}")
-    return compel(text)
 
 
 @torch.inference_mode()
