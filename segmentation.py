@@ -72,7 +72,7 @@ if __name__ == "__main__":
     pipe.image_processor.config.resample = "bilinear"
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
-    embedding_null = get_text_embeddings(pipe, "")
+    embedding_negative = get_text_embeddings(pipe, "")
 
     if config.use_blip:
         blip_device = torch.device(config.blip.device)
@@ -142,9 +142,13 @@ if __name__ == "__main__":
             # 2. get image and text embeddings
             z_target = z_source.clone()
             embedding_source = get_text_embeddings(pipe, text_source)
-            embedding_source = torch.stack([embedding_null, embedding_source], dim=1)
+            embedding_source = torch.stack(
+                [embedding_negative, embedding_source], dim=1
+            )
             embedding_target = get_text_embeddings(pipe, text_target)
-            embedding_target = torch.stack([embedding_null, embedding_target], dim=1)
+            embedding_target = torch.stack(
+                [embedding_negative, embedding_target], dim=1
+            )
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()

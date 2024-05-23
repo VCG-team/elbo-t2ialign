@@ -119,7 +119,7 @@ def register_attention_control(
             attn = sim.softmax(dim=-1, dtype=sim.dtype)
 
             # in dds loss, attn uses batched input(batch size = 4)
-            # so x[0] is null text and source img, x[1] is null text and target img
+            # so x[0] is negative text and source img, x[1] is negative text and target img
             # x[2] is source text and source img, x[3] is target text and target img
             if is_cross:
                 mixed_x = x[2] + config.target_factor * (x[2] - x[3])
