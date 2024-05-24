@@ -132,7 +132,7 @@ class DDSLoss:
         )
         added_cond_kwargs = None
         # for SDXL, added_cond_kwargs is required
-        if pooled_source:
+        if pooled_source is not None:
             add_text_embeds = torch.cat(
                 [
                     pooled_negative,

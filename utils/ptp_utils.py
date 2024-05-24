@@ -166,12 +166,12 @@ def register_attention_control(
 @torch.inference_mode()
 def aggregate_cross_att(
     att_maps: Dict[str, TL],
-    z_size: int,
+    att_max_res: int,
     pos: List[int],
     config: DictConfig,
 ):
     out, weight_sum = 0, 0
-    cur_res, cur_res_idx = z_size, 0
+    cur_res, cur_res_idx = att_max_res, 0
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
             res = round(sqrt(att.shape[0]))
@@ -181,21 +181,21 @@ def aggregate_cross_att(
                 continue
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
-            att = F.interpolate(att, size=(z_size, z_size), mode="bilinear")
+            att = F.interpolate(att, size=(att_max_res, att_max_res), mode="bilinear")
             out += att * config.cross_weight[cur_res_idx]  # apply weight
             weight_sum += config.cross_weight[cur_res_idx]
     out /= weight_sum
-    return out.view(z_size * z_size, 1)
+    return out.view(att_max_res * att_max_res, 1)
 
 
 @torch.inference_mode()
 def aggregate_self_att(
     att_maps: Dict[str, TL],
-    z_size: int,
+    att_max_res: int,
     config: DictConfig,
 ):
     out, weight_sum = 0, 0
-    cur_res, cur_res_idx = z_size, 0
+    cur_res, cur_res_idx = att_max_res, 0
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_self"]:  # attn shape: (res*res, res*res)
             res = round(sqrt(att.shape[0]))
@@ -207,20 +207,20 @@ def aggregate_self_att(
             # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
             # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
             att = att.reshape(res, res, res, res)
-            att = F.interpolate(att, size=(z_size, z_size), mode="bilinear")
-            att = att.repeat_interleave(round(z_size / res), dim=0)
-            att = att.repeat_interleave(round(z_size / res), dim=1)
+            att = F.interpolate(att, size=(att_max_res, att_max_res), mode="bilinear")
+            att = att.repeat_interleave(round(att_max_res / res), dim=0)
+            att = att.repeat_interleave(round(att_max_res / res), dim=1)
             out += att * config.self_weight[cur_res_idx]  # apply weight
             weight_sum += config.self_weight[cur_res_idx]
     out /= weight_sum
-    return out.view(z_size * z_size, z_size * z_size)
+    return out.view(att_max_res * att_max_res, att_max_res * att_max_res)
 
 
 @torch.inference_mode()
-def aggregate_self_att_aug(att_maps: Dict[str, TL], z_size: int):
+def aggregate_self_att_aug(att_maps: Dict[str, TL], att_max_res: int):
     out, weight_sum = 0, 0
     for att in att_maps["up_self"]:  # attn shape: (res*res, res*res)
-        if att.shape[0] != z_size**2:
+        if att.shape[0] != att_max_res**2:
             continue
         out += att
         weight_sum += 1

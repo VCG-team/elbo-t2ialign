@@ -73,7 +73,7 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
-    z_size = pipe.unet.config.sample_size
+    att_max_res = 64  # both SD and SDXL have att_max_res=64
     text_emb_negative = get_text_embeddings(pipe, "")
     # if the model is SDXL architecture, get add_time_ids
     add_time_ids = None
@@ -86,7 +86,7 @@ if __name__ == "__main__":
             (img_size, img_size),
             dtype=text_emb_negative[1].dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
-        )
+        ).to(diffusion_device)
 
     if config.use_blip:
         blip_device = torch.device(config.blip.device)
@@ -193,18 +193,18 @@ if __name__ == "__main__":
 
             # 4. refine attention map
             att_maps = controller.get_average_attention()
-            mask = aggregate_cross_att(att_maps, z_size, pos, config)
+            mask = aggregate_cross_att(att_maps, att_max_res, pos, config)
 
-            self_att = aggregate_self_att(att_maps, z_size, config)
+            self_att = aggregate_self_att(att_maps, att_max_res, config)
             for _ in range(config.self_att_times):
                 mask = torch.matmul(self_att, mask)
 
-            self_att_aug = aggregate_self_att_aug(att_maps, z_size)
+            self_att_aug = aggregate_self_att_aug(att_maps, att_max_res)
             for _ in range(config.self_att_aug_times):
                 mask = torch.matmul(self_att_aug, mask)
 
             # 5. save attention map as mask
-            mask = mask.view(1, 1, z_size, z_size)
+            mask = mask.view(1, 1, att_max_res, att_max_res)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
