@@ -118,22 +118,32 @@ def register_attention_control(
             # attention, what we cannot get enough of
             attn = sim.softmax(dim=-1, dtype=sim.dtype)
 
-            # in dds loss, attn uses batched input(batch size = 4)
-            # so x[0] is negative text and source img, x[1] is negative text and target img
-            # x[2] is source text and source img, x[3] is target text and target img
-            if is_cross:
-                mixed_x = x[2] + config.target_factor * (x[2] - x[3])
-                mixed_q = self.to_q(mixed_x.unsqueeze(0))
-                mixed_q = rearrange(mixed_q, "b n (h d) -> (b h) n d", h=h)
-                source_k = k[2 * h : 3 * h]
-                sim = torch.einsum("b i d, b j d -> b i j", mixed_q, source_k)
-                mixed_att = (sim * self.scale).softmax(dim=-1, dtype=sim.dtype)
-                # save cross attention between source text and mixed img(take mean for all attention heads)
-                controller(mixed_att.mean(0), is_cross, place_in_unet)
-            else:
+            # in dds loss, we use batched input(batch size = 4)
+            # input 0 is negative cond and source img, input 1 is negative cond and target img
+            # input 2 is source cond and source img, input 3 is target cond and target img
+            # see DDSLoss.get_eps_prediction in dds_utils.py for more details
+            if not is_cross:
                 source_att = attn[2 * h : 3 * h]
                 # save self attention of source img(take mean for all attention heads)
                 controller(source_att.mean(0), is_cross, place_in_unet)
+            elif config.merge_type == "latent":
+                source_q, target_q = q[2 * h : 3 * h], q[3 * h :]
+                mix_q = source_q + config.target_factor * (source_q - target_q)
+                source_k = k[2 * h : 3 * h]
+                sim_mix = torch.einsum("b i d, b j d -> b i j", mix_q, source_k)
+                mix_att = (sim_mix * self.scale).softmax(dim=-1, dtype=sim_mix.dtype)
+                # save cross attention between source cond and mixed img(take mean for all attention heads)
+                controller(mix_att.mean(0), is_cross, place_in_unet)
+            elif config.merge_type == "attention":
+                target_q = q[3 * h :]
+                source_k = k[2 * h : 3 * h]
+                sim_t = torch.einsum("b i d, b j d -> b i j", target_q, source_k)
+                target_att = (sim_t * self.scale).softmax(dim=-1, dtype=sim_t.dtype)
+                source_att = attn[2 * h : 3 * h]
+                mix_att = source_att + config.target_factor * (source_att - target_att)
+                controller(mix_att.mean(0), is_cross, place_in_unet)
+            else:
+                raise ValueError(f"Invalid merge type: {config.merge_type}")
 
             out = torch.einsum("b i j, b j d -> b i d", attn, v)
             out = rearrange(out, "(b h) n d -> b n (h d)", h=h)

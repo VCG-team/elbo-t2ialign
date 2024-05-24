@@ -15,10 +15,11 @@ self_att_aug_times: 1 # times to multiply self_att_aug
 # as image pass down->mid->up unet block, image and attention resolution change accordingly
 # only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109)
 # so we can choose some layers to achieve better performance
-target_factor: 0.5 # ratio of target latent merged into source latent, x = source + target_factor * (source - target)
-# this equation must be satisfied: len(cross_weight) = len(self_weight) = len(pipe.unet.config.down_block_types) * 2 - 1
+# notice: this equation must be satisfied: len(cross_weight) = len(self_weight) = resolution count of unet
 cross_weight: [1, 1, 10, 15, 10, 1, 1] # weight of cross att for each resolution
 self_weight: [1, 0, 0, 0, 0, 0, 1] # weight of self attention for each resolution
+merge_type: "latent" # merge 'latent' or 'attention' of target and source image
+target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
 
 # dds loss settings (dds_utils.py)
 optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
