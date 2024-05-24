@@ -67,8 +67,8 @@ class DDSLoss:
     def __init__(
         self,
         pipe: DiffusionPipeline,
-        alpha_exp=0,
-        sigma_exp=0,
+        alpha_exp=0.0,
+        sigma_exp=0.0,
     ):
         if DDSLoss.init_flag:
             return

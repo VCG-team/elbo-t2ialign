@@ -1,7 +1,7 @@
 # Modified from Prompt-to-Prompt(ICLR 2023) https://github.com/google/prompt-to-prompt
 import abc
 from math import sqrt
-from typing import List
+from typing import Dict, List
 
 import torch
 import torch.nn.functional as F
@@ -22,10 +22,10 @@ class AttentionControl(abc.ABC):
         return
 
     @abc.abstractmethod
-    def forward(self, attn, is_cross: bool, place_in_unet: str):
+    def forward(self, attn: T, is_cross: bool, place_in_unet: str) -> T:
         raise NotImplementedError
 
-    def __call__(self, attn, is_cross: bool, place_in_unet: str):
+    def __call__(self, attn: T, is_cross: bool, place_in_unet: str):
         attn = self.forward(attn, is_cross, place_in_unet)
         self.cur_att_layer += 1
         if self.cur_att_layer == self.num_att_layers:
@@ -57,7 +57,7 @@ class AttentionStore(AttentionControl):
             "up_self": [],
         }
 
-    def forward(self, attn, is_cross: bool, place_in_unet: str):
+    def forward(self, attn: T, is_cross: bool, place_in_unet: str):
         key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
         self.step_store[key].append(attn)
         return attn
@@ -71,7 +71,7 @@ class AttentionStore(AttentionControl):
                     self.attention_store[key][i] += self.step_store[key][i]
         self.step_store = self.get_empty_store()
 
-    def get_average_attention(self):
+    def get_average_attention(self) -> Dict[str, TL]:
         average_attention = {
             key: [item / self.cur_step for item in self.attention_store[key]]
             for key in self.attention_store
@@ -85,8 +85,8 @@ class AttentionStore(AttentionControl):
 
     def __init__(self):
         super(AttentionStore, self).__init__()
-        self.step_store = self.get_empty_store()
-        self.attention_store = {}
+        self.step_store: Dict[str, TL] = self.get_empty_store()
+        self.attention_store: Dict[str, TL] = {}
 
 
 def register_attention_control(
@@ -163,78 +163,65 @@ def register_attention_control(
     controller.num_att_layers = cross_att_count
 
 
+@torch.inference_mode()
 def aggregate_cross_att(
-    controller: AttentionStore,
+    att_maps: Dict[str, TL],
+    z_size: int,
     pos: List[int],
     config: DictConfig,
 ):
-    # 1. get all att maps
-    att_maps = controller.get_average_attention()
-
-    # 2. extract cross att maps
-    cross_layer_cnt = -1
-    cross_atts: TL = []
+    out, weight_sum = 0, 0
+    cur_res, cur_res_idx = z_size, 0
     for location in ["down", "mid", "up"]:
-        for item in att_maps[f"{location}_cross"]:  # item shape: (res*res, prompt len)
-            cross_layer_cnt += 1
-            if cross_layer_cnt not in config.valid_cross_layer:
+        for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
+            res = round(sqrt(att.shape[0]))
+            if res != cur_res:
+                cur_res, cur_res_idx = res, cur_res_idx + 1
+            if config.cross_weight[cur_res_idx] == 0:
                 continue
-            cross_atts.append(item)
-
-    # 3. get cross att maps for specific words
-    cross_atts = [att[:, pos].mean(1) for att in cross_atts]
-
-    # 4. interpolate these cross att maps to 64x64, and then apply weight
-    cross_atts_64 = []
-    cross_weight_sum = sum(config.cross_weight)
-    for idx, att in enumerate(cross_atts):
-        res = round(sqrt(att.shape[0]))
-        att = att.reshape(1, 1, res, res)
-        att = F.interpolate(att, size=(64, 64), mode="bilinear")
-        cross_atts_64.append(att * config.cross_weight[idx] / cross_weight_sum)
-
-    # 5. sum up these cross att maps
-    return torch.stack(cross_atts_64).sum(0).view(64 * 64, 1)
+            att = att[:, pos].mean(1)  # get cross att maps for specific words
+            att = att.reshape(1, 1, res, res)
+            att = F.interpolate(att, size=(z_size, z_size), mode="bilinear")
+            out += att * config.cross_weight[cur_res_idx]  # apply weight
+            weight_sum += config.cross_weight[cur_res_idx]
+    out /= weight_sum
+    return out.view(z_size * z_size, 1)
 
 
+@torch.inference_mode()
 def aggregate_self_att(
-    controller: AttentionStore,
+    att_maps: Dict[str, TL],
+    z_size: int,
     config: DictConfig,
 ):
-    # 1. get all att maps
-    att_maps = controller.get_average_attention()
-
-    # 2. extract self att maps
-    self_layer_cnt = -1
-    self_atts: TL = []
+    out, weight_sum = 0, 0
+    cur_res, cur_res_idx = z_size, 0
     for location in ["down", "mid", "up"]:
-        for item in att_maps[f"{location}_self"]:  # item shape: (res*res, res*res)
-            self_layer_cnt += 1
-            if self_layer_cnt not in config.valid_self_layer:
+        for att in att_maps[f"{location}_self"]:  # attn shape: (res*res, res*res)
+            res = round(sqrt(att.shape[0]))
+            if res != cur_res:
+                cur_res, cur_res_idx = res, cur_res_idx + 1
+            if config.self_weight[cur_res_idx] == 0:
                 continue
-            self_atts.append(item)
-
-    # 3. interpolate these self att maps to 64x64, and then apply weight
-    self_atts_64 = []
-    self_weight_sum = sum(config.self_weight)
-    for idx, att in enumerate(self_atts):
-        res = round(sqrt(att.shape[0]))
-        # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
-        # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
-        # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
-        att = att.reshape(res, res, res, res)
-        att: T = F.interpolate(att, size=(64, 64), mode="bilinear")
-        att = att.repeat_interleave(round(64 / res), dim=0)
-        att = att.repeat_interleave(round(64 / res), dim=1)
-        self_atts_64.append(att * config.self_weight[idx] / self_weight_sum)
-
-    # 4. sum up these self att maps
-    return torch.stack(self_atts_64).sum(0).view(64 * 64, 64 * 64)
+            # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
+            # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
+            # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
+            att = att.reshape(res, res, res, res)
+            att = F.interpolate(att, size=(z_size, z_size), mode="bilinear")
+            att = att.repeat_interleave(round(z_size / res), dim=0)
+            att = att.repeat_interleave(round(z_size / res), dim=1)
+            out += att * config.self_weight[cur_res_idx]  # apply weight
+            weight_sum += config.self_weight[cur_res_idx]
+    out /= weight_sum
+    return out.view(z_size * z_size, z_size * z_size)
 
 
-def aggregate_self_64(controller: AttentionStore):
-    # 1. get all att maps
-    att_maps = controller.get_average_attention()
-
-    # 2. take mean for self att maps with 64x64 resolution
-    return torch.stack(att_maps["up_self"][6:9]).mean(0)
+@torch.inference_mode()
+def aggregate_self_att_aug(att_maps: Dict[str, TL], z_size: int):
+    out, weight_sum = 0, 0
+    for att in att_maps["up_self"]:  # attn shape: (res*res, res*res)
+        if att.shape[0] != z_size**2:
+            continue
+        out += att
+        weight_sum += 1
+    return out / weight_sum  # return shape: (res*res, res*res)

@@ -7,19 +7,18 @@ use_cls_predict: True
 delay_collection: False # whether to delay the collection of attention maps
 collect_timesteps: [1, 25, 50, 75, 100, 125, 150] # timesteps to collect attention maps, only valid when delay_collection is True
 collect_with_original_eps: True # whether to collect attention maps with original eps, only valid when delay_collection is True
-self_times: 1 # times to multiply self_att
-self_64_times: 1 # times to multiply self_64
+self_att_times: 1 # times to multiply self_att
+self_att_aug_times: 1 # times to multiply self_att_aug
 
 # ptp attention settings (ptp_utils.py)
-# For stable diffusion v1.5 series, cross/self attns are both 16 layers in unet.
-# As img pass down->mid->up unet block, img resolution will pass 64*2->32*2->16*2->8->16*3->32*3->64*3.
-# Only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109).
-# So we can choose some layers to achieve better performance.
+# diffusion models usually use symmetric unet with cross/self attentions to predict noise
+# as image pass down->mid->up unet block, image and attention resolution change accordingly
+# only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109)
+# so we can choose some layers to achieve better performance
 target_factor: 0.5 # ratio of target latent merged into source latent, x = source + target_factor * (source - target)
-valid_cross_layer: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # cross attention layer to select
-cross_weight: [1, 1, 1, 1, 10, 10, 15, 10, 10, 10, 1, 1, 1, 1, 1, 1] # weight of cross attention for each layer, the length of the list should be the same as valid_cross_layer
-valid_self_layer: [0, 1, 13, 14, 15] # self attention layer to select
-self_weight: [1, 1, 1, 1, 1] # weight of self attention for each layer, the length of the list should be the same as valid_self_layer
+# this equation must be satisfied: len(cross_weight) = len(self_weight) = len(pipe.unet.config.down_block_types) * 2 - 1
+cross_weight: [1, 1, 10, 15, 10, 1, 1] # weight of cross att for each resolution
+self_weight: [1, 0, 0, 0, 0, 0, 1] # weight of self attention for each resolution
 
 # dds loss settings (dds_utils.py)
 optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]

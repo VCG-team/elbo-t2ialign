@@ -21,8 +21,8 @@ from utils.dds_utils import (
 from utils.ptp_utils import (
     AttentionStore,
     aggregate_cross_att,
-    aggregate_self_64,
     aggregate_self_att,
+    aggregate_self_att_aug,
     register_attention_control,
 )
 
@@ -73,16 +73,17 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
+    z_size = pipe.unet.config.sample_size
     text_emb_negative = get_text_embeddings(pipe, "")
     # if the model is SDXL architecture, get add_time_ids
     add_time_ids = None
     if text_emb_negative[1] is not None:
         text_encoder_projection_dim = pipe.text_encoder_2.config.projection_dim
-        size = pipe.vae.config.sample_size
+        img_size = pipe.vae.config.sample_size
         add_time_ids = pipe._get_add_time_ids(
-            (size, size),
+            (img_size, img_size),
             (0, 0),
-            (size, size),
+            (img_size, img_size),
             dtype=text_emb_negative[1].dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
         )
@@ -191,18 +192,19 @@ if __name__ == "__main__":
                 )
 
             # 4. refine attention map
-            att_map = aggregate_cross_att(controller, pos, config)
+            att_maps = controller.get_average_attention()
+            mask = aggregate_cross_att(att_maps, z_size, pos, config)
 
-            self_att = aggregate_self_att(controller, config)
-            for _ in range(config.self_times):
-                att_map = torch.matmul(self_att, att_map)
+            self_att = aggregate_self_att(att_maps, z_size, config)
+            for _ in range(config.self_att_times):
+                mask = torch.matmul(self_att, mask)
 
-            self_64 = aggregate_self_64(controller)
-            for _ in range(config.self_64_times):
-                att_map = torch.matmul(self_64, att_map)
+            self_att_aug = aggregate_self_att_aug(att_maps, z_size)
+            for _ in range(config.self_att_aug_times):
+                mask = torch.matmul(self_att_aug, mask)
 
             # 5. save attention map as mask
-            mask = att_map.view(1, 1, 64, 64)
+            mask = mask.view(1, 1, z_size, z_size)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
