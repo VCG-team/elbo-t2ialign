@@ -40,10 +40,12 @@ def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
 
 @torch.inference_mode()
 def get_image_embeddings(pipe: DiffusionPipeline, image: Image):
-    size = pipe.vae.config.sample_size
+    vae = pipe.vae
+    size = vae.config.sample_size
     img_tensor = pipe.image_processor.preprocess(image, size, size)
-    img_tensor = img_tensor.to(pipe.device, dtype=pipe.dtype)
-    return pipe.vae.encode(img_tensor)["latent_dist"].mean * pipe.vae.scaling_factor
+    img_tensor = img_tensor.to(vae.device, dtype=vae.dtype)
+    z_tensor = vae.encode(img_tensor)["latent_dist"].mean * vae.scaling_factor
+    return z_tensor.to(pipe.device, dtype=pipe.dtype)
 
 
 def init_pipe(device, dtype, unet, scheduler) -> Tuple[UNet2DConditionModel, T, T]:

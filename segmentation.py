@@ -70,6 +70,10 @@ if __name__ == "__main__":
         cache_dir=config.cache_dir,
     ).to(diffusion_device)
     pipe.image_processor.config.resample = "bilinear"
+    # The VAE is in float32 to avoid NaN losses
+    # see: https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image_sdxl.py#L712
+    pipe.vae = pipe.vae.to(torch.float32)
+    pipe.vae = torch.compile(pipe.vae, mode="reduce-overhead", fullgraph=True)
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
