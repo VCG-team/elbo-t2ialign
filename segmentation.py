@@ -3,6 +3,7 @@ import shutil
 import warnings
 from argparse import ArgumentParser
 from collections import defaultdict
+from math import sqrt
 
 import cv2
 import torch
@@ -77,7 +78,7 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
-    att_max_res = 64  # both SD and SDXL have att_max_res=64
+    att_max_res = None
     text_emb_negative = get_text_embeddings(pipe, "")
     # if the model is SDXL architecture, get add_time_ids
     add_time_ids = None
@@ -197,6 +198,8 @@ if __name__ == "__main__":
 
             # 4. refine attention map
             att_maps = controller.get_average_attention()
+            if att_max_res is None:
+                att_max_res = round(sqrt(att_maps["down_cross"][0].shape[0]))
             mask = aggregate_cross_att(att_maps, att_max_res, pos, config)
 
             self_att = aggregate_self_att(att_maps, att_max_res, config)
