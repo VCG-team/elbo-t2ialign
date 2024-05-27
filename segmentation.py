@@ -78,7 +78,6 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
-    att_max_res = None
     text_emb_negative = get_text_embeddings(pipe, "")
     # if the model is SDXL architecture, get add_time_ids
     add_time_ids = None
@@ -198,20 +197,19 @@ if __name__ == "__main__":
 
             # 4. refine attention map
             att_maps = controller.get_average_attention()
-            if att_max_res is None:
-                att_max_res = round(sqrt(att_maps["down_cross"][0].shape[0]))
-            mask = aggregate_cross_att(att_maps, att_max_res, pos, config)
+            mask = aggregate_cross_att(att_maps, pos, config)
 
-            self_att = aggregate_self_att(att_maps, att_max_res, config)
+            self_att = aggregate_self_att(att_maps, config)
             for _ in range(config.self_att_times):
                 mask = torch.matmul(self_att, mask)
 
-            self_att_aug = aggregate_self_att_aug(att_maps, att_max_res)
+            self_att_aug = aggregate_self_att_aug(att_maps)
             for _ in range(config.self_att_aug_times):
                 mask = torch.matmul(self_att_aug, mask)
 
             # 5. save attention map as mask
-            mask = mask.view(1, 1, att_max_res, att_max_res)
+            max_res = round(sqrt(mask.shape[0]))
+            mask = mask.view(1, 1, max_res, max_res)
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
