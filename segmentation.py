@@ -68,7 +68,7 @@ if __name__ == "__main__":
         config.diffusion.variant,
         torch_dtype=diffusion_dtype,
         use_safetensors=True,
-        cache_dir=config.cache_dir,
+        model_dir=config.model_dir,
     ).to(diffusion_device)
     pipe.image_processor.config.resample = "bilinear"
     # The VAE is in float32 to avoid NaN losses
@@ -96,13 +96,13 @@ if __name__ == "__main__":
         blip_device = torch.device(config.blip.device)
         blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
         blip_processor = BlipProcessor.from_pretrained(
-            config.blip.variant, cache_dir=config.cache_dir
+            config.blip.variant, model_dir=config.model_dir
         )
         blip_model = BlipForConditionalGeneration.from_pretrained(
             config.blip.variant,
             torch_dtype=blip_dtype,
             use_safetensors=True,
-            cache_dir=config.cache_dir,
+            model_dir=config.model_dir,
         ).to(blip_device)
         blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
 

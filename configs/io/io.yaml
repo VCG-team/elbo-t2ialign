@@ -16,8 +16,8 @@ use_cls_predict: False
 cls_predict: ""
 
 # model path
-cache_dir: "./models"
-
+cache_dir: "./tmp/cache"
+model_dir: "./models"
 diffusion:
   variant: "runwayml/stable-diffusion-v1-5"
   device: 0
