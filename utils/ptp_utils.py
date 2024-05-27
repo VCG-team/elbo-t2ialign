@@ -178,7 +178,7 @@ def aggregate_cross_att(
     att_maps: Dict[str, TL],
     pos: List[int],
     config: DictConfig,
-):
+) -> T:
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
     for location in ["down", "mid", "up"]:
@@ -203,7 +203,7 @@ def aggregate_cross_att(
 def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
-):
+) -> T:
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
     for location in ["down", "mid", "up"]:
@@ -229,7 +229,7 @@ def aggregate_self_att(
 
 
 @torch.inference_mode()
-def aggregate_self_att_aug(att_maps: Dict[str, TL]):
+def aggregate_self_att_aug(att_maps: Dict[str, TL]) -> T:
     out, weight_sum = 0, 0
     max_res_square = None
     for att in att_maps["up_self"][::-1]:  # attn shape: (res*res, res*res)

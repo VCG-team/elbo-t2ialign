@@ -5,9 +5,9 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from math import sqrt
 
-import cv2
 import torch
 import torch.nn.functional as F
+from cv2 import imwrite
 from diffusers import DiffusionPipeline
 from omegaconf import OmegaConf
 from tqdm import tqdm
@@ -157,10 +157,18 @@ if __name__ == "__main__":
                     + "."
                 )
 
-            # 2. get text and target image embeddings
+            # 2. prepare image optimization input
             text_emb_source = get_text_embeddings(pipe, text_source)
             text_emb_target = get_text_embeddings(pipe, text_target)
             z_target = z_source.clone()
+            mask_fn = None
+            if config.enable_mask:
+                # if apply mask to loss, we need to def the mask function
+                def mask_fn():
+                    att_maps = controller.get_average_attention()
+                    mask = aggregate_cross_att(att_maps, pos, config)
+                    max_res = round(sqrt(mask.shape[0]))
+                    return mask.view(max_res, max_res)
 
             # 3. dds loss optimization and attention maps collection
             controller.reset()
@@ -176,6 +184,7 @@ if __name__ == "__main__":
                 config.optimize_timesteps,
                 defaultdict(lambda: None),
                 config,
+                mask_fn,
             )
             if config.delay_collection:
                 if not config.collect_with_original_eps:
@@ -213,4 +222,4 @@ if __name__ == "__main__":
             mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
-            cv2.imwrite(f"{img_output_path}/{k}_{cls_name}.png", mask)
+            imwrite(f"{img_output_path}/{k}_{cls_name}.png", mask)

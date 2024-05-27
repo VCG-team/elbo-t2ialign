@@ -1,8 +1,9 @@
 # Modified from DDS(ICCV 2023) https://github.com/google/prompt-to-prompt/blob/main/DDS_zeroshot.ipynb
 from collections import defaultdict
-from typing import DefaultDict, List, Optional, Tuple, Union
+from typing import Callable, DefaultDict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from compel import Compel, ReturnedEmbeddingsType
 from diffusers import (
     DiffusionPipeline,
@@ -201,6 +202,7 @@ def image_optimization(
     timesteps: List[int],
     time_to_eps: DefaultDict[int, TN],
     config: DictConfig,
+    mask_fn: Optional[Callable[[], T]] = None,
 ) -> Tuple[T, DefaultDict[int, TN]]:
     dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
     time_to_eps_return = defaultdict(lambda: None)
@@ -212,6 +214,7 @@ def image_optimization(
         guidance_scale = 7.5
     else:
         guidance_scale = 5.0
+    mask = None
 
     for timestep in timesteps:
         z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
@@ -231,6 +234,11 @@ def image_optimization(
         )
         if loss_type == "none":
             continue
+        if mask_fn is not None and mask is None:
+            mask = mask_fn()
+            mask = mask.view(1, 1, mask.shape[0], mask.shape[1])
+            mask = F.interpolate(mask, size=z_target.shape[2:], mode="bilinear")
+            mask = (mask - mask.min()) / (mask.max() - mask.min())
         loss, _ = dds_loss.get_loss(
             z_target,
             alpha_t,
@@ -239,6 +247,7 @@ def image_optimization(
             eps_pred_target,
             eps,
             loss_type,
+            mask,
         )
         optimizer.zero_grad()
         (config.loss_factor * loss).backward()
