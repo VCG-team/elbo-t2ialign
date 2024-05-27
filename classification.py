@@ -49,16 +49,16 @@ if __name__ == "__main__":
     clip_device = torch.device(config.clip.device)
     clip_dtype = torch.float16 if config.clip.dtype == "fp16" else torch.float32
     clip_tokenizer = CLIPTokenizer.from_pretrained(
-        config.clip.variant, model_dir=config.model_dir
+        config.clip.variant, cache_dir=config.model_dir
     )
     clip_processor = CLIPImageProcessor.from_pretrained(
         config.clip.variant,
-        model_dir=config.model_dir,
+        cache_dir=config.model_dir,
     )
     clip_model = CLIPModel.from_pretrained(
         config.clip.variant,
         use_safetensors=True,
-        model_dir=config.model_dir,
+        cache_dir=config.model_dir,
         torch_dtype=clip_dtype,
     ).to(clip_device)
     clip_model = torch.compile(clip_model, mode="reduce-overhead", fullgraph=True)
@@ -66,12 +66,12 @@ if __name__ == "__main__":
     blip_device = torch.device(config.blip.device)
     blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
     blip_processor = BlipProcessor.from_pretrained(
-        config.blip.variant, model_dir=config.model_dir
+        config.blip.variant, cache_dir=config.model_dir
     )
     blip_model = BlipForConditionalGeneration.from_pretrained(
         config.blip.variant,
         use_safetensors=True,
-        model_dir=config.model_dir,
+        cache_dir=config.model_dir,
         torch_dtype=blip_dtype,
     ).to(blip_device)
     blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
