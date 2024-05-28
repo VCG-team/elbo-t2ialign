@@ -15,18 +15,15 @@ use_cls_predict: False
 # if leave empty, use default path: output_path/cls_predict.npy
 cls_predict: ""
 
-# model path
+# cache config
 cache_dir: "./tmp/cache"
+
+# model path
 model_dir: "./models"
 diffusion:
   variant: "runwayml/stable-diffusion-v1-5"
   device: 0
   dtype: "fp16"
-
-blip:
-  variant: "Salesforce/blip-image-captioning-large"
-  device: 0
-  dtype: "fp32"
 
 clip:
   variant: "openai/clip-vit-large-patch14"

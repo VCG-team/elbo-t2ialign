@@ -1,5 +1,6 @@
 # segmentation process settings (segmentation.py)
-use_blip: True
+use_img2text: True
+special_token: "''"
 # see ./configs/io/io.yaml for details
 # by io.yaml default, use_cls_prediction is False
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset

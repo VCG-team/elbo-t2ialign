@@ -11,7 +11,6 @@ from cv2 import imwrite
 from diffusers import DiffusionPipeline
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from transformers import BlipForConditionalGeneration, BlipProcessor
 
 from datasets import build_dataset
 from utils.dds_utils import (
@@ -19,6 +18,7 @@ from utils.dds_utils import (
     get_text_embeddings,
     image_optimization,
 )
+from utils.img2text import Img2Text
 from utils.ptp_utils import (
     AttentionStore,
     aggregate_cross_att,
@@ -59,6 +59,8 @@ if __name__ == "__main__":
     os.makedirs(img_output_path, exist_ok=True)
     dataset = build_dataset(config)
     category = list(config.category.keys())
+    if config.use_img2text:
+        img2text = Img2Text(config)
 
     diffusion_device = torch.device(config.diffusion.device)
     diffusion_dtype = (
@@ -92,20 +94,6 @@ if __name__ == "__main__":
             text_encoder_projection_dim=text_encoder_projection_dim,
         ).to(diffusion_device)
 
-    if config.use_blip:
-        blip_device = torch.device(config.blip.device)
-        blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
-        blip_processor = BlipProcessor.from_pretrained(
-            config.blip.variant, cache_dir=config.model_dir
-        )
-        blip_model = BlipForConditionalGeneration.from_pretrained(
-            config.blip.variant,
-            torch_dtype=blip_dtype,
-            use_safetensors=True,
-            cache_dir=config.model_dir,
-        ).to(blip_device)
-        blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
-
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
     for k, (img, label, name) in enumerate(tqdm(dataset, desc="processing images...")):
@@ -119,42 +107,36 @@ if __name__ == "__main__":
         for cls_idx in labels:
             # 1. generate text prompts
             cls_name = category[cls_idx]
+            # -2 to remove [START] and [END] tokens
             cls_name_len = len(pipe.tokenizer.encode(cls_name)) - 2
+            text_source = f"a photograph of {cls_name}"
+            text_target = f"a photograph of {config.special_token}"
+            # pos for cls_name in text_source, 1 for [START], 3 for a photograph of, 4 = 1 + 3
             pos = [4 + i for i in range(cls_name_len)]
-            text_source = f"a photograph of {cls_name}."
-            text_target = f"a photograph of ''."
 
-            if config.use_blip:
-                # blip inference
-                with torch.inference_mode():
-                    blip_inputs = blip_processor(
-                        img, text_source[:-1], return_tensors="pt"
-                    ).to(blip_device)
-                    blip_out = blip_model.generate(**blip_inputs)
-                    blip_out_text = blip_processor.decode(
-                        blip_out[0], skip_special_tokens=True
-                    )
+            if config.use_img2text:
+                # use large multimodal model to convert img to text
+                out_text = img2text(img, name, text_source)
                 # update pos for cross attention extraction
-                next_word = blip_out_text[len(text_source) :].split(" ")[0]
+                next_word = out_text.split(" ")[0]
                 if next_word.endswith("ing"):
                     pos.append(pos[-1] + 1)
                 # refer to clip-es (CVPR 2023), we add background categories to the prompt
                 # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
                 # paper: https://arxiv.org/abs/2212.09506
                 text_target = (
-                    text_target[:-1]
-                    + blip_out_text[len(text_source) - 1 :]
+                    text_target
+                    + " "
+                    + out_text
                     + " and "
                     + ",".join(config.bg_category)
-                    + "."
                 )
                 text_source = (
-                    text_source[:-1]
-                    + "++"
-                    + blip_out_text[len(text_source) - 1 :]
+                    text_source
+                    + "++ "
+                    + out_text
                     + " and "
                     + ",".join(config.bg_category)
-                    + "."
                 )
 
             # 2. prepare image optimization input

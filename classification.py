@@ -10,15 +10,10 @@ import torch
 from omegaconf import OmegaConf
 from sklearn.metrics import f1_score, precision_score, recall_score
 from tqdm import tqdm
-from transformers import (
-    BlipForConditionalGeneration,
-    BlipProcessor,
-    CLIPImageProcessor,
-    CLIPModel,
-    CLIPTokenizer,
-)
+from transformers import CLIPImageProcessor, CLIPModel, CLIPTokenizer
 
 from datasets import build_dataset
+from utils.img2text import Img2Text
 
 if __name__ == "__main__":
 
@@ -63,18 +58,7 @@ if __name__ == "__main__":
     ).to(clip_device)
     clip_model = torch.compile(clip_model, mode="reduce-overhead", fullgraph=True)
 
-    blip_device = torch.device(config.blip.device)
-    blip_dtype = torch.float16 if config.blip.dtype == "fp16" else torch.float32
-    blip_processor = BlipProcessor.from_pretrained(
-        config.blip.variant, cache_dir=config.model_dir
-    )
-    blip_model = BlipForConditionalGeneration.from_pretrained(
-        config.blip.variant,
-        use_safetensors=True,
-        cache_dir=config.model_dir,
-        torch_dtype=blip_dtype,
-    ).to(blip_device)
-    blip_model = torch.compile(blip_model, mode="reduce-overhead", fullgraph=True)
+    img2text = Img2Text(config)
 
     # load image dataset for classification
     dataset = build_dataset(config)
@@ -125,10 +109,8 @@ if __name__ == "__main__":
         # TODO: cache
         noun, all_word = set(), set()
         for prompt in text_prompts:
-            blip_inputs = blip_processor(image, prompt, return_tensors="pt")
-            blip_inputs = blip_inputs.to(blip_device)
-            blip_out = blip_model.generate(**blip_inputs)
-            text = blip_processor.decode(blip_out[0], skip_special_tokens=True)
+            out_text = img2text(image, name, prompt)
+            text = prompt + " " + out_text
             # use spacy to extract noun and all words, exclude prompt
             # related docs: https://spacy.io/usage/linguistic-features#pos-tagging
             for token in nlp(text)[len(nlp(prompt)) :]:
