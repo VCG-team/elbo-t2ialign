@@ -44,7 +44,7 @@ class Img2Text:
         )
 
     def __call__(self, img: Image, img_name: str, prompt: str) -> str:  # todo space
-        clean_prompt = re.sub(" +", " ", prompt.strip())
+        clean_prompt = re.sub(r"\s+", " ", prompt.strip())
         hash_prompt = hashlib.md5(clean_prompt.encode()).hexdigest()
         key = f"{img_name}--{hash_prompt}"
         if key in self.cache:
@@ -65,7 +65,8 @@ class Img2Text:
             model_out, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
         if text.startswith(prompt):
-            text = text[len(prompt) :].strip()
+            text = text[len(prompt) :]
+        text = re.sub(r"\s+", " ", text.strip())
         return text
 
     def _get_text_with_api(self, img: Image, prompt: str) -> str:

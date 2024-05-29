@@ -16,4 +16,4 @@ output
 
 # tmp folder/file
 tmp
-test.py
+test*
