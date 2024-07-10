@@ -9,6 +9,8 @@ from diffusers import DiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
 
+import scipy.stats as stats
+
 T = torch.Tensor
 TL = List[T]
 
@@ -179,6 +181,10 @@ def aggregate_cross_att(
     pos: List[int],
     config: DictConfig,
 ) -> T:
+    Gaus_mean = config.layers_num/2 # Set the mean of the Gaussian distribution to the middle
+    Gaus_dist = stats.norm(loc=Gaus_mean, scale=config.Gaus_vari)
+    scale = config.cross_weight_max / Gaus_dist.pdf(Gaus_mean) # scale the value of distribution
+
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
     for location in ["down", "mid", "up"]:
@@ -188,13 +194,13 @@ def aggregate_cross_att(
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-            if config.cross_weight[cur_res_idx] == 0:
+            if round(scale * Gaus_dist.pdf(cur_res_idx)) == 0:
                 continue
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
-            out += att * config.cross_weight[cur_res_idx]  # apply weight
-            weight_sum += config.cross_weight[cur_res_idx]
+            out += att * round(scale * Gaus_dist.pdf(cur_res_idx))  # apply weight
+            weight_sum += round(scale * Gaus_dist.pdf(cur_res_idx))
     out /= weight_sum
     return out.view(max_res * max_res, 1)
 
@@ -204,6 +210,10 @@ def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
 ) -> T:
+    Gaus_mean = config.layers_num / 2  # Set the mean of the Gaussian distribution to the middle
+    Gaus_dist = stats.norm(loc=Gaus_mean, scale=config.Gaus_vari)
+    scale = config.cross_weight_max / Gaus_dist.pdf(Gaus_mean) # scale the value of distribution
+
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
     for location in ["down", "mid", "up"]:
@@ -213,7 +223,7 @@ def aggregate_self_att(
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-            if config.self_weight[cur_res_idx] == 0:
+            if round(scale * Gaus_dist.pdf(cur_res_idx)) == 0:
                 continue
             # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
             # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
@@ -222,8 +232,8 @@ def aggregate_self_att(
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
             att = att.repeat_interleave(round(max_res / res), dim=0)
             att = att.repeat_interleave(round(max_res / res), dim=1)
-            out += att * config.self_weight[cur_res_idx]  # apply weight
-            weight_sum += config.self_weight[cur_res_idx]
+            out += att * round(scale * Gaus_dist.pdf(cur_res_idx))  # apply weight
+            weight_sum += round(scale * Gaus_dist.pdf(cur_res_idx))
     out /= weight_sum
     return out.view(max_res * max_res, max_res * max_res)
 

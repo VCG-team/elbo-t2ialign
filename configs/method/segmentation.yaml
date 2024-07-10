@@ -19,6 +19,10 @@ self_att_aug_times: 1 # times to multiply self_att_aug
 # notice: this equation must be satisfied: len(cross_weight) = len(self_weight) = resolution count of unet
 cross_weight: [1, 1, 10, 15, 10, 1, 1] # weight of cross att for each resolution
 self_weight: [1, 0, 0, 0, 0, 0, 1] # weight of self attention for each resolution
+layers_num: 7 # number of attention map layers
+Gaus_vari: 1.2 # Variance of Gaussian distribution
+cross_weight_max: 15
+
 merge_type: "latent" # merge 'latent' or 'attention' of target and source image
 target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
 
