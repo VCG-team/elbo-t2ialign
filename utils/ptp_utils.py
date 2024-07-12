@@ -206,13 +206,9 @@ def aggregate_cross_att(
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-
             weight = round(scale * gaus_dist.log_prob(torch.tensor(cur_res_idx)).exp().item())
             if weight == 0:
                 continue
-
-            # print('res:', res)
-            # print('weight:', weight)
 
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
