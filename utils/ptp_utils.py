@@ -9,7 +9,8 @@ from diffusers import DiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
 
-import scipy.stats as stats
+import torch.distributions as dist
+
 
 T = torch.Tensor
 TL = List[T]
@@ -181,26 +182,43 @@ def aggregate_cross_att(
     pos: List[int],
     config: DictConfig,
 ) -> T:
-    Gaus_mean = config.layers_num/2 # Set the mean of the Gaussian distribution to the middle
-    Gaus_dist = stats.norm(loc=Gaus_mean, scale=config.Gaus_vari)
-    scale = config.cross_weight_max / Gaus_dist.pdf(Gaus_mean) # scale the value of distribution
-
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
+
+    # calculate the layers_num
+    att_maps_set=set()
+    for location in ["down", "mid", "up"]:
+        for att in att_maps[f"{location}_cross"]:
+            res = round(sqrt(att.shape[0]))
+            att_maps_set.add(res)
+    layers_num=2 * len(att_maps_set) - 1
+
+    gaus_mean = (layers_num - 1) / 2  # Set the mean of the Gaussian distribution to the middle
+    gaus_dist = dist.Normal(gaus_mean, config.gaus_vari)
+    # scale the weight to the max_weight
+    scale = config.cross_weight_max / gaus_dist.log_prob(torch.tensor(gaus_mean)).exp().item()
+
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
             res = round(sqrt(att.shape[0]))
+
             if max_res is None:
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-            if round(scale * Gaus_dist.pdf(cur_res_idx)) == 0:
+
+            weight = round(scale * gaus_dist.log_prob(torch.tensor(cur_res_idx)).exp().item())
+            if weight == 0:
                 continue
+
+            # print('res:', res)
+            # print('weight:', weight)
+
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
-            out += att * round(scale * Gaus_dist.pdf(cur_res_idx))  # apply weight
-            weight_sum += round(scale * Gaus_dist.pdf(cur_res_idx))
+            out += att * weight  # apply weight
+            weight_sum += weight
     out /= weight_sum
     return out.view(max_res * max_res, 1)
 
@@ -210,9 +228,6 @@ def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
 ) -> T:
-    Gaus_mean = config.layers_num / 2  # Set the mean of the Gaussian distribution to the middle
-    Gaus_dist = stats.norm(loc=Gaus_mean, scale=config.Gaus_vari)
-    scale = config.cross_weight_max / Gaus_dist.pdf(Gaus_mean) # scale the value of distribution
 
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
@@ -223,7 +238,7 @@ def aggregate_self_att(
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-            if round(scale * Gaus_dist.pdf(cur_res_idx)) == 0:
+            if config.self_weight[cur_res_idx] == 0:
                 continue
             # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
             # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
@@ -232,8 +247,8 @@ def aggregate_self_att(
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
             att = att.repeat_interleave(round(max_res / res), dim=0)
             att = att.repeat_interleave(round(max_res / res), dim=1)
-            out += att * round(scale * Gaus_dist.pdf(cur_res_idx))  # apply weight
-            weight_sum += round(scale * Gaus_dist.pdf(cur_res_idx))
+            out += att * config.self_weight[cur_res_idx]  # apply weight
+            weight_sum += config.self_weight[cur_res_idx]
     out /= weight_sum
     return out.view(max_res * max_res, max_res * max_res)
 
