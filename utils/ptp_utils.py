@@ -8,9 +8,7 @@ import torch.nn.functional as F
 from diffusers import DiffusionPipeline
 from einops import rearrange
 from omegaconf import DictConfig
-
-import torch.distributions as dist
-
+from torch.distributions import Normal
 
 T = torch.Tensor
 TL = List[T]
@@ -182,37 +180,28 @@ def aggregate_cross_att(
     pos: List[int],
     config: DictConfig,
 ) -> T:
-    out, weight_sum = 0, 0
-    cur_res, cur_res_idx, max_res = None, 0, None
+    out, weight_sum, max_res = 0, 0, None
 
     # calculate the layers_num
-    att_maps_set=set()
+    layers_num = 0
     for location in ["down", "mid", "up"]:
-        for att in att_maps[f"{location}_cross"]:
-            res = round(sqrt(att.shape[0]))
-            att_maps_set.add(res)
-    layers_num=2 * len(att_maps_set) - 1
+        layers_num += len(att_maps[f"{location}_cross"])
 
-    gaus_mean = (layers_num - 1) / 2  # Set the mean of the Gaussian distribution to the middle
-    gaus_dist = dist.Normal(gaus_mean, config.gaus_vari)
-    # scale the weight to the max_weight
-    scale = config.cross_weight_max / gaus_dist.log_prob(torch.tensor(gaus_mean)).exp().item()
+    # set the mean of the gaussian distribution to the middle
+    gaussian_mean = (layers_num + 1) / 2
+    weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
 
+    cur_layer = 1
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
             res = round(sqrt(att.shape[0]))
-
             if max_res is None:
-                max_res, cur_res = res, res
-            if res != cur_res:
-                cur_res, cur_res_idx = res, cur_res_idx + 1
-            weight = round(scale * gaus_dist.log_prob(torch.tensor(cur_res_idx)).exp().item())
-            if weight == 0:
-                continue
-
+                max_res = res
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
+            weight = weight_dist.log_prob(torch.tensor(cur_layer)).exp().item()
+            cur_layer += 1
             out += att * weight  # apply weight
             weight_sum += weight
     out /= weight_sum
@@ -224,7 +213,6 @@ def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
 ) -> T:
-
     out, weight_sum = 0, 0
     cur_res, cur_res_idx, max_res = None, 0, None
     for location in ["down", "mid", "up"]:

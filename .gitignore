@@ -1,6 +1,3 @@
-# editor config
-.vscode
-
 # cache
 **/__pycache__/
 **/__MACOSX/
