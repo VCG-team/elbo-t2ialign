@@ -16,7 +16,7 @@ self_att_aug_times: 1 # times to multiply self_att_aug
 # as image pass unet/dit block, image and attention resolution change accordingly
 # only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109)
 # so we can choose some layers to achieve better performance
-cross_gaussian_var: 1.2 # variance of gaussian distribution for cross attention
+cross_gaussian_var: 3 # variance of gaussian distribution for cross attention
 self_weight: [1, 0, 0, 0, 0, 0, 1] # weight of self attention for each resolution
 merge_type: "latent" # merge 'latent' or 'attention' of target and source image
 target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
