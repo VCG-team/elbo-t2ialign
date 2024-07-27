@@ -181,26 +181,31 @@ def aggregate_cross_att(
     config: DictConfig,
 ) -> T:
     out, weight_sum, max_res = 0, 0, None
+    cur_res, cur_res_idx, cur_layer = None, 0, 1
 
-    # calculate the layers_num
-    layers_num = 0
-    for location in ["down", "mid", "up"]:
-        layers_num += len(att_maps[f"{location}_cross"])
+    if config.cross_gaussian_var != 0:
+        # calculate the layers_num
+        layers_num = 0
+        for location in ["down", "mid", "up"]:
+            layers_num += len(att_maps[f"{location}_cross"])
+        # set the mean of the gaussian distribution to the middle
+        gaussian_mean = (layers_num + 1) / 2
+        weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
 
-    # set the mean of the gaussian distribution to the middle
-    gaussian_mean = (layers_num + 1) / 2
-    weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
-
-    cur_layer = 1
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
             res = round(sqrt(att.shape[0]))
             if max_res is None:
-                max_res = res
+                max_res, cur_res = res, res
+            if res != cur_res:
+                cur_res, cur_res_idx = res, cur_res_idx + 1
             att = att[:, pos].mean(1)  # get cross att maps for specific words
             att = att.reshape(1, 1, res, res)
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
-            weight = weight_dist.log_prob(torch.tensor(cur_layer)).exp().item()
+            if config.cross_gaussian_var != 0:
+                weight = weight_dist.log_prob(torch.tensor(cur_layer)).exp().item()
+            else:
+                weight = config.cross_weight[cur_res_idx]
             cur_layer += 1
             out += att * weight  # apply weight
             weight_sum += weight
@@ -213,8 +218,9 @@ def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
 ) -> T:
-    out, weight_sum = 0, 0
-    cur_res, cur_res_idx, max_res = None, 0, None
+    out, weight_sum, max_res = 0, 0, None
+    cur_res, cur_res_idx = None, 0
+
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_self"]:  # attn shape: (res*res, res*res)
             res = round(sqrt(att.shape[0]))
@@ -222,8 +228,6 @@ def aggregate_self_att(
                 max_res, cur_res = res, res
             if res != cur_res:
                 cur_res, cur_res_idx = res, cur_res_idx + 1
-            if config.self_weight[cur_res_idx] == 0:
-                continue
             # refer to diffseg (CVPR 2024), we interpolate and then repeat (repeat is important)
             # related code: https://github.com/google/diffseg/blob/main/diffseg/segmentor.py#L40
             # paper: https://arxiv.org/abs/2308.12469 (Attention Aggregation Section)
