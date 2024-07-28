@@ -13,6 +13,7 @@ from tqdm import tqdm
 from transformers import CLIPImageProcessor, CLIPModel, CLIPTokenizer
 
 from datasets import build_dataset
+from utils.cfg_utils import merge_cli_cfg
 from utils.img2text import Img2Text
 
 if __name__ == "__main__":
@@ -32,7 +33,8 @@ if __name__ == "__main__":
     method_cfg = OmegaConf.load(args.method_cfg)
     cli_cfg = OmegaConf.from_dotlist(unknown)
 
-    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg, cli_cfg)
+    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg)
+    config = merge_cli_cfg(config, cli_cfg)
     config.output_path = config.output_path[config.dataset]
     os.makedirs(config.output_path, exist_ok=True)
     OmegaConf.save(config, os.path.join(config.output_path, "classification.yaml"))
