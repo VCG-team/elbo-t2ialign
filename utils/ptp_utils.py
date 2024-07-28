@@ -182,15 +182,19 @@ def aggregate_cross_att(
 ) -> T:
     out, weight_sum, max_res = 0, 0, None
     cur_res, cur_res_idx, cur_layer = None, 0, 1
+    scale_factor = 0
+    down_cross_layers, mid_cross_layers, up_cross_layers = len(att_maps["down_cross"]), len(att_maps["mid_cross"]), len(att_maps["up_cross"])
 
     if config.cross_gaussian_var != 0:
-        # calculate the first half of layers_num
+        # calculate the first half of layers_num(down_cross_layers + half_of_mid_cross_layers)
         layers_num = 0
-        layers_num += len(att_maps["down_cross"])
-        layers_num += (len(att_maps["mid_cross"]) + 1) / 2
+        layers_num += down_cross_layers
+        layers_num += (mid_cross_layers + 1) / 2
         # set the mean of the gaussian distribution to the middle
         gaussian_mean = layers_num
         weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
+        # calculate the scale_factor to scale the down and up to the same range
+        scale_factor = down_cross_layers / up_cross_layers
 
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
@@ -203,7 +207,10 @@ def aggregate_cross_att(
             att = att.reshape(1, 1, res, res)
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
             if config.cross_gaussian_var != 0:
-                weight = weight_dist.log_prob(torch.tensor(cur_layer)).exp().item()
+                down_mid_sum = down_cross_layers + mid_cross_layers
+                # use scaled cur_layer when in up_cross
+                adjusted_layer = (cur_layer - down_mid_sum) * scale_factor + down_mid_sum if cur_layer > down_mid_sum else cur_layer
+                weight = weight_dist.log_prob(torch.tensor(adjusted_layer)).exp().item()
             else:
                 weight = config.cross_weight[cur_res_idx]
             cur_layer += 1
