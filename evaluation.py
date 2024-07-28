@@ -12,6 +12,8 @@ from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
+from utils.cfg_utils import merge_cli_cfg
+
 category = []
 num_cls = 0
 config = None
@@ -222,7 +224,8 @@ if __name__ == "__main__":
     method_cfg = OmegaConf.load(args.method_cfg)
     cli_cfg = OmegaConf.from_dotlist(unknown)
 
-    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg, cli_cfg)
+    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg)
+    config = merge_cli_cfg(config, cli_cfg)
     config.output_path = config.output_path[config.dataset]
     os.makedirs(config.output_path, exist_ok=True)
     OmegaConf.save(config, os.path.join(config.output_path, "evaluation.yaml"))
