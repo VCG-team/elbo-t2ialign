@@ -184,12 +184,12 @@ def aggregate_cross_att(
     cur_res, cur_res_idx, cur_layer = None, 0, 1
 
     if config.cross_gaussian_var != 0:
-        # calculate the layers_num
+        # calculate the first half of layers_num
         layers_num = 0
-        for location in ["down", "mid", "up"]:
-            layers_num += len(att_maps[f"{location}_cross"])
+        layers_num += len(att_maps["down_cross"])
+        layers_num += (len(att_maps["mid_cross"]) + 1) / 2
         # set the mean of the gaussian distribution to the middle
-        gaussian_mean = (layers_num + 1) / 2
+        gaussian_mean = layers_num
         weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
 
     for location in ["down", "mid", "up"]:
