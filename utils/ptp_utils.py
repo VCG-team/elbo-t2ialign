@@ -193,8 +193,8 @@ def aggregate_cross_att(
         # calculate the scale_factor to scale the down and up to the same range
         scale_factor = down_cross_num / up_cross_num
         # set the mean of the gaussian distribution to the middle
-        gaussian_mean = down_cross_num + (mid_cross_num + 1) / 2
-        weight_dist = Normal(gaussian_mean, config.cross_gaussian_var)
+        middle = down_cross_num + (mid_cross_num + 1) / 2
+        weight_dist = Normal(middle, config.cross_gaussian_var)
 
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_cross"]:  # attn shape: (res*res, prompt len)
@@ -216,9 +216,9 @@ def aggregate_cross_att(
                 weight = weight_dist.log_prob(torch.tensor(adjusted_layer)).exp().item()
             else:
                 weight = config.cross_weight[cur_res_idx]
-            cur_layer += 1
             out += att * weight  # apply weight
             weight_sum += weight
+            cur_layer += 1
     out /= weight_sum
     return out.view(max_res * max_res, 1)
 
@@ -228,8 +228,27 @@ def aggregate_self_att(
     att_maps: Dict[str, TL],
     config: DictConfig,
 ) -> T:
-    out, weight_sum, max_res = 0, 0, None
-    cur_res, cur_res_idx = None, 0
+    out, weight_sum, max_res = (
+        [0] * len(config.self_weight),
+        [0] * len(config.self_weight),
+        None,
+    )
+    cur_res, cur_res_idx, cur_layer = None, 0, 1
+
+    if len(config.self_gassian_var) != 0:
+        out = [0] * len(config.self_gassian_var)
+        weight_sum = [0] * len(config.self_gassian_var)
+        down_self_num, mid_self_num, up_self_num = (
+            len(att_maps["down_self"]),
+            len(att_maps["mid_self"]),
+            len(att_maps["up_self"]),
+        )
+        down_mid_sum = down_self_num + mid_self_num
+        # calculate the scale_factor to scale the down and up to the same range
+        scale_factor = down_self_num / up_self_num
+        # set the mean of the gaussian distribution to the middle
+        middle = down_self_num + (mid_self_num + 1) / 2
+        weight_dist = [Normal(0, var) for var in config.self_gassian_var]
 
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_self"]:  # attn shape: (res*res, res*res)
@@ -245,21 +264,35 @@ def aggregate_self_att(
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
             att = att.repeat_interleave(round(max_res / res), dim=0)
             att = att.repeat_interleave(round(max_res / res), dim=1)
-            out += att * config.self_weight[cur_res_idx]  # apply weight
-            weight_sum += config.self_weight[cur_res_idx]
-    out /= weight_sum
-    return out.view(max_res * max_res, max_res * max_res)
-
-
-@torch.inference_mode()
-def aggregate_self_att_aug(att_maps: Dict[str, TL]) -> T:
-    out, weight_sum = 0, 0
-    max_res_square = None
-    for att in att_maps["up_self"][::-1]:  # attn shape: (res*res, res*res)
-        if max_res_square is None:
-            max_res_square = att.shape[0]
-        if att.shape[0] != max_res_square:
-            continue
-        out += att
-        weight_sum += 1
-    return out / weight_sum  # return shape: (res*res, res*res)
+            if len(config.self_gassian_var) != 0:
+                # use scaled cur_layer when in up_self
+                adjusted_layer = (
+                    (cur_layer - down_mid_sum) * scale_factor + down_mid_sum
+                    if cur_layer > down_mid_sum
+                    else cur_layer
+                )
+                adjusted_layer = (
+                    adjusted_layer
+                    if adjusted_layer <= middle
+                    else 2 * middle - adjusted_layer
+                )
+                weight = [
+                    weight_dist[i].log_prob(torch.tensor(adjusted_layer)).exp().item()
+                    for i in range(len(config.self_gassian_var))
+                ]
+            else:
+                weight = [
+                    config.self_weight[i][cur_res_idx]
+                    for i in range(len(config.self_weight))
+                ]
+            for i in range(len(weight)):
+                out[i] += att * weight[i]  # apply weight
+                weight_sum[i] += weight[i]
+            cur_layer += 1
+    for i in range(len(out)):
+        out[i] /= weight_sum[i]
+        out[i] = out[i].view(max_res * max_res, max_res * max_res)
+    result = out[0]
+    for i in range(1, len(out)):
+        result = torch.matmul(out[i], result)
+    return result

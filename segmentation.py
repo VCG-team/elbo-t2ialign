@@ -24,7 +24,6 @@ from utils.ptp_utils import (
     AttentionStore,
     aggregate_cross_att,
     aggregate_self_att,
-    aggregate_self_att_aug,
     register_attention_control,
 )
 
@@ -191,14 +190,8 @@ if __name__ == "__main__":
             # 4. refine attention map
             att_maps = controller.get_average_attention()
             mask = aggregate_cross_att(att_maps, pos, config)
-
             self_att = aggregate_self_att(att_maps, config)
-            for _ in range(config.self_att_times):
-                mask = torch.matmul(self_att, mask)
-
-            self_att_aug = aggregate_self_att_aug(att_maps)
-            for _ in range(config.self_att_aug_times):
-                mask = torch.matmul(self_att_aug, mask)
+            mask = torch.matmul(self_att, mask)
 
             # 5. save attention map as mask
             max_res = round(sqrt(mask.shape[0]))

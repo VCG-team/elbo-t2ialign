@@ -8,8 +8,6 @@ use_cls_predict: True
 delay_collection: False # whether to delay the collection of attention maps
 collect_timesteps: [1, 25, 50, 75, 100, 125, 150] # timesteps to collect attention maps, only valid when delay_collection is True
 collect_with_original_eps: True # whether to collect attention maps with original eps, only valid when delay_collection is True
-self_att_times: 1 # times to multiply self_att
-self_att_aug_times: 1 # times to multiply self_att_aug
 
 # ptp attention settings (ptp_utils.py)
 # diffusion models use unet/dit with cross/self attentions to predict noise
@@ -18,7 +16,10 @@ self_att_aug_times: 1 # times to multiply self_att_aug
 # so we can choose some layers to achieve better performance
 cross_gaussian_var: 0 # variance of gaussian distribution for cross attention
 cross_weight: [1, 1, 10, 15, 10, 1, 1] # enabled when cross_gaussian_var == 0, weight of cross attention for each resolution
-self_weight: [1, 0, 0, 0, 0, 0, 1] # weight of self attention for each resolution
+self_gassian_var: [] # variance of gaussian distribution for self attention
+self_weight: # enabled when self_gaussian_var == [], weight of self attention for each resolution
+  - [1, 0, 0, 0, 0, 0, 1]
+  - [0, 0, 0, 0, 0, 0, 1]
 merge_type: "latent" # merge 'latent' or 'attention' of target and source image
 target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
 
