@@ -16,7 +16,7 @@ collect_with_original_eps: True # whether to collect attention maps with origina
 # so we can choose some layers to achieve better performance
 cross_gaussian_var: 0 # variance of gaussian distribution for cross attention
 cross_weight: [1, 1, 10, 15, 10, 1, 1] # enabled when cross_gaussian_var == 0, weight of cross attention for each resolution
-self_gassian_var: [] # variance of gaussian distribution for self attention
+self_gaussian_var: [] # variance of gaussian distribution for self attention
 self_weight: # enabled when self_gaussian_var == [], weight of self attention for each resolution
   - [1, 0, 0, 0, 0, 0, 1]
   - [0, 0, 0, 0, 0, 0, 1]

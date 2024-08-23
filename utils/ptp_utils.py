@@ -235,9 +235,9 @@ def aggregate_self_att(
     )
     cur_res, cur_res_idx, cur_layer = None, 0, 1
 
-    if len(config.self_gassian_var) != 0:
-        out = [0] * len(config.self_gassian_var)
-        weight_sum = [0] * len(config.self_gassian_var)
+    if len(config.self_gaussian_var) != 0:
+        out = [0] * len(config.self_gaussian_var)
+        weight_sum = [0] * len(config.self_gaussian_var)
         down_self_num, mid_self_num, up_self_num = (
             len(att_maps["down_self"]),
             len(att_maps["mid_self"]),
@@ -248,7 +248,7 @@ def aggregate_self_att(
         scale_factor = down_self_num / up_self_num
         # set the mean of the gaussian distribution to the middle
         middle = down_self_num + (mid_self_num + 1) / 2
-        weight_dist = [Normal(0, var) for var in config.self_gassian_var]
+        weight_dist = [Normal(0, var) for var in config.self_gaussian_var]
 
     for location in ["down", "mid", "up"]:
         for att in att_maps[f"{location}_self"]:  # attn shape: (res*res, res*res)
@@ -264,7 +264,7 @@ def aggregate_self_att(
             att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
             att = att.repeat_interleave(round(max_res / res), dim=0)
             att = att.repeat_interleave(round(max_res / res), dim=1)
-            if len(config.self_gassian_var) != 0:
+            if len(config.self_gaussian_var) != 0:
                 # use scaled cur_layer when in up_self
                 adjusted_layer = (
                     (cur_layer - down_mid_sum) * scale_factor + down_mid_sum
@@ -278,7 +278,7 @@ def aggregate_self_att(
                 )
                 weight = [
                     weight_dist[i].log_prob(torch.tensor(adjusted_layer)).exp().item()
-                    for i in range(len(config.self_gassian_var))
+                    for i in range(len(config.self_gaussian_var))
                 ]
             else:
                 weight = [
