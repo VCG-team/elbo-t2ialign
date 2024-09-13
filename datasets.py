@@ -110,6 +110,56 @@ class COCOClsDataset(Dataset):
         return len(self.img_name_list)
 
 
+class VOCSimDataset(Dataset):
+    def __init__(
+        self,
+        img_name_list_path="./data/voc_sim/val_id.txt",
+        voc_sim_root="./datasets/voc_sim",
+        label_file_path="./data/voc_sim/cls_labels.npy",
+    ):
+        self.img_name_list = load_img_name_list(img_name_list_path)
+        self.label_list = load_image_label_list_from_npy(
+            self.img_name_list, label_file_path
+        )
+        self.voc_sim_root = voc_sim_root
+
+    def __getitem__(self, idx):
+        name = self.img_name_list[idx]
+        img = Image.open(
+            os.path.join(self.voc_sim_root, "images", f"{name}.png")
+        ).convert("RGB")
+        label = torch.from_numpy(self.label_list[idx])
+        return img, label, name
+
+    def __len__(self):
+        return len(self.img_name_list)
+
+
+class COCOCapDataset(Dataset):
+    def __init__(
+        self,
+        img_name_list_path="./data/coco_cap/val_id.txt",
+        coco_cap_root="./datasets/coco_cap",
+        label_file_path="./data/coco_cap/cls_labels.npy",
+    ):
+        self.img_name_list = load_img_name_list(img_name_list_path)
+        self.label_list = load_image_label_list_from_npy(
+            self.img_name_list, label_file_path
+        )
+        self.coco_cap_root = coco_cap_root
+
+    def __getitem__(self, idx):
+        name = self.img_name_list[idx]
+        img = Image.open(
+            os.path.join(self.coco_cap_root, "images", f"{name}.png")
+        ).convert("RGB")
+        label = torch.from_numpy(self.label_list[idx])
+        return img, label, name
+
+    def __len__(self):
+        return len(self.img_name_list)
+
+
 def build_dataset(config: DictConfig) -> Dataset:
     # checking use cls_predict.npy or cls_labels.npy
     # see ./configs/io/io.yaml for details
@@ -127,6 +177,8 @@ def build_dataset(config: DictConfig) -> Dataset:
         "voc": VOC12Dataset,
         "coco": COCOClsDataset,
         "context": VOCContextDataset,
+        "voc_sim": VOCSimDataset,
+        "coco_cap": COCOCapDataset,
     }
     if config.dataset not in name_to_cls:
         sys.exit("dataset not supported")

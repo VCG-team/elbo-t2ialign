@@ -45,6 +45,8 @@ def load_gt_and_predict(
             gt_path = os.path.join(data_root, "SegmentationClassAug", f"{name}.png")
         elif config.dataset == "context":
             gt_path = os.path.join(data_root, "SegmentationClassContext", f"{name}.png")
+        elif config.dataset == "voc_sim" or config.dataset == "coco_cap":
+            gt_path = os.path.join(data_root, "annotations", f"{name}.png")
         else:
             sys.exit("unknown dataset")
         gt = np.array(Image.open(gt_path))

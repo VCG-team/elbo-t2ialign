@@ -48,6 +48,12 @@ python -m spacy download en_core_web_sm
     │   │   ├── annotations
     │   │   │   ├── train2017
     │   │   │   ├── val2017
+    │   ├── voc_sim
+    │   │   ├── images
+    │   │   ├── annotations
+    │   ├── coco_cap
+    │   │   ├── images
+    │   │   ├── annotations
     ```
 
 3. Finally, download [SBD dataset](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=6126343&casa_token=cOQGLW2KWqUAAAAA:Z-QHpQPf8Pnb07A75yBm2muYjqJwYUYPFbwwxMFHRcjRX0zl45kEGNqyTEPH7irB2QbabZbn&tag=1) annotations via this [link](https://www.dropbox.com/s/oeu149j8qtbs1x0/SegmentationClassAug.zip?dl=0). After downloading, replace `./datasets/VOCdevkit/VOC2012/SegmentationClassAug` with the downloaded folder. This step makes sure the evaluation is consistent with [MCTFormer](https://github.com/xulianuwa/MCTformer).

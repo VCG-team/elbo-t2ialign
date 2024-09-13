@@ -3,6 +3,8 @@ output_path:
   coco: "./output/coco"
   context: "./output/context"
   voc: "./output/voc"
+  voc_sim: "./output/voc_sim"
+  coco_cap: "./output/coco_cap"
 
 # input config
 # fix random seed
