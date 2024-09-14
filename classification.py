@@ -12,8 +12,8 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from tqdm import tqdm
 from transformers import CLIPImageProcessor, CLIPModel, CLIPTokenizer
 
-from datasets import build_dataset
-from utils.cfg_utils import merge_cli_cfg
+from utils.check_cli_input import merge_cli_cfg
+from utils.datasets import build_dataset
 from utils.img2text import Img2Text
 
 if __name__ == "__main__":

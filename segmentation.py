@@ -12,20 +12,16 @@ from diffusers import DiffusionPipeline
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from datasets import build_dataset
-from utils.cfg_utils import merge_cli_cfg
-from utils.dds_utils import (
-    get_image_embeddings,
-    get_text_embeddings,
-    image_optimization,
-)
-from utils.img2text import Img2Text
-from utils.ptp_utils import (
+from utils.attention_control import (
     AttentionStore,
     aggregate_cross_att,
     aggregate_self_att,
     register_attention_control,
 )
+from utils.check_cli_input import merge_cli_cfg
+from utils.datasets import build_dataset
+from utils.img2text import Img2Text
+from utils.loss import get_image_embeddings, get_text_embeddings, image_optimization
 
 if __name__ == "__main__":
 

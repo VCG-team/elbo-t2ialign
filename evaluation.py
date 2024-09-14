@@ -12,7 +12,7 @@ from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
-from utils.cfg_utils import merge_cli_cfg
+from utils.check_cli_input import merge_cli_cfg
 
 category = []
 num_cls = 0
