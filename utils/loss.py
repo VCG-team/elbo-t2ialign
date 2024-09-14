@@ -1,61 +1,105 @@
 # Modified from DDS(ICCV 2023) https://github.com/google/prompt-to-prompt/blob/main/DDS_zeroshot.ipynb
-from collections import defaultdict
-from typing import Callable, DefaultDict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import torch
-import torch.nn.functional as F
-from compel import Compel, ReturnedEmbeddingsType
-from diffusers import (
-    DiffusionPipeline,
-    StableDiffusionPipeline,
-    StableDiffusionXLPipeline,
-    UNet2DConditionModel,
-)
-from omegaconf import DictConfig
-from PIL import Image
-from torch.optim.sgd import SGD
+import torch.nn as nn
+from diffusers import DiffusionPipeline
 
 T = torch.Tensor
 TN = Optional[T]
 TS = Union[Tuple[T, ...], List[T]]
 
 
-@torch.inference_mode()
-def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
-    # use compel to do prompt weighting
-    # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
-    if isinstance(pipe, StableDiffusionPipeline):
-        compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
-        return compel(text), None
-    elif isinstance(pipe, StableDiffusionXLPipeline):
-        compel = Compel(
-            tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
-            text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
-            returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
-            requires_pooled=[False, True],
+# CutLoss from CDS(CVPR 2024) https://github.com/HyelinNAM/ContrastiveDenoisingScore/blob/main/utils/loss.py#L10
+class CutLoss:
+    instance = None
+    init_flag = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls.instance is None:
+            cls.instance = super().__new__(cls)
+        return cls.instance
+
+    def __init__(self, n_patches=256, patch_size=1):
+        if CutLoss.init_flag:
+            return
+        CutLoss.init_flag = True
+        self.n_patches = n_patches
+        self.patch_size = patch_size
+
+    def get_attn_cut_loss(self, ref_noise, trg_noise):
+        loss = 0
+
+        bs, res2, c = ref_noise.shape
+        res = int(np.sqrt(res2))
+
+        ref_noise_reshape = ref_noise.reshape(bs, res, res, c).permute(0, 3, 1, 2)
+        trg_noise_reshape = trg_noise.reshape(bs, res, res, c).permute(0, 3, 1, 2)
+
+        for ps in self.patch_size:
+            if ps > 1:
+                pooling = nn.AvgPool2d(kernel_size=(ps, ps))
+                ref_noise_pooled = pooling(ref_noise_reshape)
+                trg_noise_pooled = pooling(trg_noise_reshape)
+            else:
+                ref_noise_pooled = ref_noise_reshape
+                trg_noise_pooled = trg_noise_reshape
+
+            ref_noise_pooled = nn.functional.normalize(ref_noise_pooled, dim=1)
+            trg_noise_pooled = nn.functional.normalize(trg_noise_pooled, dim=1)
+
+            ref_noise_pooled = ref_noise_pooled.permute(0, 2, 3, 1).flatten(1, 2)
+            patch_ids = np.random.permutation(ref_noise_pooled.shape[1])
+            patch_ids = patch_ids[: int(min(self.n_patches, ref_noise_pooled.shape[1]))]
+            patch_ids = torch.tensor(
+                patch_ids, dtype=torch.long, device=ref_noise.device
+            )
+
+            ref_sample = ref_noise_pooled[:1, patch_ids, :].flatten(0, 1)
+
+            trg_noise_pooled = trg_noise_pooled.permute(0, 2, 3, 1).flatten(1, 2)
+            trg_sample = trg_noise_pooled[:1, patch_ids, :].flatten(0, 1)
+
+            loss += self.PatchNCELoss(ref_sample, trg_sample).mean()
+        return loss
+
+    def PatchNCELoss(self, ref_noise, trg_noise, batch_size=1, nce_T=0.07):
+        batch_size = batch_size
+        nce_T = nce_T
+        cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction="none")
+        mask_dtype = torch.bool
+
+        num_patches = ref_noise.shape[0]
+        dim = ref_noise.shape[1]
+        ref_noise = ref_noise.detach()
+
+        l_pos = torch.bmm(
+            ref_noise.view(num_patches, 1, -1), trg_noise.view(num_patches, -1, 1)
         )
-        return compel(text)
-    else:
-        raise ValueError(f"Invalid pipeline type: {type(pipe)}")
+        l_pos = l_pos.view(num_patches, 1)
 
+        # reshape features to batch size
+        ref_noise = ref_noise.view(batch_size, -1, dim)
+        trg_noise = trg_noise.view(batch_size, -1, dim)
+        npatches = ref_noise.shape[1]
+        l_neg_curbatch = torch.bmm(ref_noise, trg_noise.transpose(2, 1))
 
-@torch.inference_mode()
-def get_image_embeddings(pipe: DiffusionPipeline, image: Image):
-    vae = pipe.vae
-    size, scaling_factor = vae.config.sample_size, vae.config.scaling_factor
-    img_tensor = pipe.image_processor.preprocess(image, size, size)
-    img_tensor = img_tensor.to(vae.device, dtype=vae.dtype)
-    z_tensor = vae.encode(img_tensor)["latent_dist"].mean * scaling_factor
-    return z_tensor.to(pipe.device, dtype=pipe.dtype)
+        # diagonal entries are similarity between same features, and hence meaningless.
+        # just fill the diagonal with very small number, which is exp(-10) and almost zero
+        diagonal = torch.eye(npatches, device=ref_noise.device, dtype=mask_dtype)[
+            None, :, :
+        ]
+        l_neg_curbatch.masked_fill_(diagonal, -10.0)
+        l_neg = l_neg_curbatch.view(-1, npatches)
 
+        out = torch.cat((l_pos, l_neg), dim=1) / nce_T
 
-def init_pipe(device, dtype, unet, scheduler) -> Tuple[UNet2DConditionModel, T, T]:
-    with torch.inference_mode():
-        alphas = torch.sqrt(scheduler.alphas_cumprod).to(device, dtype=dtype)
-        sigmas = torch.sqrt(1 - scheduler.alphas_cumprod).to(device, dtype=dtype)
-    for p in unet.parameters():
-        p.requires_grad = False
-    return unet, alphas, sigmas
+        loss = cross_entropy_loss(
+            out, torch.zeros(out.size(0), dtype=torch.long, device=ref_noise.device)
+        )
+
+        return loss
 
 
 class DDSLoss:
@@ -81,9 +125,14 @@ class DDSLoss:
         self.alpha_exp = alpha_exp
         self.sigma_exp = sigma_exp
         self.dtype = pipe.dtype
-        self.unet, self.alphas, self.sigmas = init_pipe(
-            pipe.device, pipe.dtype, pipe.unet, pipe.scheduler
-        )
+        with torch.inference_mode():
+            alphas = torch.sqrt(pipe.scheduler.alphas_cumprod)
+            sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod)
+        self.alphas = alphas.to(pipe.device, dtype=pipe.dtype)
+        self.sigmas = sigmas.to(pipe.device, dtype=pipe.dtype)
+        for p in pipe.unet.parameters():
+            p.requires_grad = False
+        self.unet = pipe.unet
 
     @torch.inference_mode()
     def noise_input(self, z: T, eps: TN = None, timestep: Optional[int] = None):
@@ -188,69 +237,3 @@ class DDSLoss:
         loss = z_target * grad.clone()
         loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
         return loss, log_loss
-
-
-def image_optimization(
-    pipe: DiffusionPipeline,
-    z_source: T,
-    z_target: T,
-    text_emb_source: Tuple[T, TN],
-    text_emb_target: Tuple[T, TN],
-    text_emb_negative: Tuple[T, TN],
-    add_time_ids: TN,
-    loss_type: str,
-    timesteps: List[int],
-    time_to_eps: DefaultDict[int, TN],
-    config: DictConfig,
-    mask_fn: Optional[Callable[[], T]] = None,
-) -> Tuple[T, DefaultDict[int, TN]]:
-    dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
-    time_to_eps_return = defaultdict(lambda: None)
-    z_target.requires_grad = True
-    optimizer = SGD(params=[z_target], lr=config.lr)
-    if config.guidance_scale is not None:
-        guidance_scale = config.guidance_scale
-    elif isinstance(pipe, StableDiffusionPipeline):
-        guidance_scale = 7.5
-    else:
-        guidance_scale = 5.0
-    mask = None
-
-    for timestep in timesteps:
-        z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-            z_source, time_to_eps[timestep], timestep
-        )
-        z_t_target, _, _, _, _ = dds_loss.noise_input(z_target, eps, timestep)
-        time_to_eps_return[timestep] = eps
-        eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
-            z_t_source,
-            z_t_target,
-            t,
-            text_emb_source,
-            text_emb_target,
-            text_emb_negative,
-            add_time_ids,
-            guidance_scale,
-        )
-        if loss_type == "none":
-            continue
-        if mask_fn is not None and mask is None:
-            mask = mask_fn()
-            mask = mask.view(1, 1, mask.shape[0], mask.shape[1])
-            mask = F.interpolate(mask, size=z_target.shape[2:], mode="bilinear")
-            mask = (mask - mask.min()) / (mask.max() - mask.min())
-        loss, _ = dds_loss.get_loss(
-            z_target,
-            alpha_t,
-            sigma_t,
-            eps_pred_source,
-            eps_pred_target,
-            eps,
-            loss_type,
-            mask,
-        )
-        optimizer.zero_grad()
-        (config.loss_factor * loss).backward()
-        optimizer.step()
-
-    return z_target, time_to_eps_return

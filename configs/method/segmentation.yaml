@@ -7,9 +7,8 @@ special_token: "''"
 use_cls_predict: True
 delay_collection: False # whether to delay the collection of attention maps
 collect_timesteps: [1, 25, 50, 75, 100, 125, 150] # timesteps to collect attention maps, only valid when delay_collection is True
-collect_with_original_eps: True # whether to collect attention maps with original eps, only valid when delay_collection is True
 
-# ptp attention settings (ptp_utils.py)
+# attention control settings (attention_control.py)
 # diffusion models use unet/dit with cross/self attentions to predict noise
 # as image pass unet/dit block, image and attention resolution change accordingly
 # only part of attn layers have strong semantic information(https://arxiv.org/abs/2309.04109)
@@ -23,12 +22,17 @@ self_weight: # enabled when self_gaussian_var == [], weight of self attention fo
 merge_type: "latent" # merge 'latent' or 'attention' of target and source image
 target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
 
-# dds loss settings (dds_utils.py)
+# loss settings (loss.py)
 optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
-loss_type: "dds" # loss function, "dds" or "sds" or "none"
+loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
 loss_factor: 2000.0 # coefficient of loss
 enable_mask: False # whether enable mask for loss calculation
 lr: 1.0e-1 # learning rate
 guidance_scale: null # null or float, if null, use the default value of pipeline
+# dds & sds loss hyperparameters
 alpha_exp: 0.0
 sigma_exp: 0.0
+# cds loss hyperparameters
+patch_size: [1, 2]
+n_patches: 256
+w_cut: 3.0

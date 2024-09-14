@@ -4,12 +4,20 @@ import warnings
 from argparse import ArgumentParser
 from collections import defaultdict
 from math import sqrt
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+from compel import Compel, ReturnedEmbeddingsType
 from cv2 import imwrite
-from diffusers import DiffusionPipeline
+from diffusers import (
+    DiffusionPipeline,
+    StableDiffusionPipeline,
+    StableDiffusionXLPipeline,
+)
 from omegaconf import OmegaConf
+from PIL import Image
+from torch.optim.sgd import SGD
 from tqdm import tqdm
 
 from utils.attention_control import (
@@ -21,7 +29,41 @@ from utils.attention_control import (
 from utils.check_cli_input import merge_cli_cfg
 from utils.datasets import build_dataset
 from utils.img2text import Img2Text
-from utils.loss import get_image_embeddings, get_text_embeddings, image_optimization
+from utils.loss import DDSLoss
+
+T = torch.Tensor
+TN = Optional[T]
+TS = Union[Tuple[T, ...], List[T]]
+
+
+@torch.inference_mode()
+def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
+    # use compel to do prompt weighting
+    # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
+    if isinstance(pipe, StableDiffusionPipeline):
+        compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
+        return compel(text), None
+    elif isinstance(pipe, StableDiffusionXLPipeline):
+        compel = Compel(
+            tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
+            text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
+            returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+            requires_pooled=[False, True],
+        )
+        return compel(text)
+    else:
+        raise ValueError(f"Invalid pipeline type: {type(pipe)}")
+
+
+@torch.inference_mode()
+def get_image_embeddings(pipe: DiffusionPipeline, image: Image):
+    vae = pipe.vae
+    size, scaling_factor = vae.config.sample_size, vae.config.scaling_factor
+    img_tensor = pipe.image_processor.preprocess(image, size, size)
+    img_tensor = img_tensor.to(vae.device, dtype=vae.dtype)
+    z_tensor = vae.encode(img_tensor)["latent_dist"].mean * scaling_factor
+    return z_tensor.to(pipe.device, dtype=pipe.dtype)
+
 
 if __name__ == "__main__":
 
@@ -78,9 +120,17 @@ if __name__ == "__main__":
     register_attention_control(pipe, controller, config)
 
     text_emb_negative = get_text_embeddings(pipe, "")
+    if config.guidance_scale is not None:
+        guidance_scale = config.guidance_scale
+    elif isinstance(pipe, StableDiffusionPipeline):
+        guidance_scale = 7.5
+    elif isinstance(pipe, StableDiffusionXLPipeline):
+        guidance_scale = 5.0
+    else:
+        raise ValueError("guidance_scale is not set")
     # if the model is SDXL architecture, get add_time_ids
     add_time_ids = None
-    if text_emb_negative[1] is not None:
+    if isinstance(pipe, StableDiffusionXLPipeline):
         text_encoder_projection_dim = pipe.text_encoder_2.config.projection_dim
         img_size = pipe.vae.config.sample_size
         add_time_ids = pipe._get_add_time_ids(
@@ -93,7 +143,7 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (img, label, name) in enumerate(tqdm(dataset, desc="processing images...")):
+    for k, (img, label, name) in enumerate(tqdm(dataset, desc="segmenting images...")):
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
@@ -104,7 +154,7 @@ if __name__ == "__main__":
         for cls_idx in labels:
             # 1. generate text prompts
             cls_name = category[cls_idx]
-            # -2 to remove [START] and [END] tokens
+            # miuns 2 to remove [START] and [END] tokens
             cls_name_len = len(pipe.tokenizer.encode(cls_name)) - 2
             text_source = f"a photograph of {cls_name}"
             text_target = f"a photograph of {config.special_token}"
@@ -136,52 +186,73 @@ if __name__ == "__main__":
                     + ",".join(config.bg_category)
                 )
 
-            # 2. prepare image optimization input
+            # 2. prepare image optimization input, loss, and optimizer
             text_emb_source = get_text_embeddings(pipe, text_source)
             text_emb_target = get_text_embeddings(pipe, text_target)
             z_target = z_source.clone()
-            mask_fn = None
-            if config.enable_mask:
-                # if apply mask to loss, we need to def the mask function
-                def mask_fn():
-                    att_maps = controller.get_average_attention()
-                    mask = aggregate_cross_att(att_maps, pos, config)
-                    max_res = round(sqrt(mask.shape[0]))
-                    return mask.view(max_res, max_res)
+            z_target.requires_grad = True
+            dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
+            optimizer = SGD(params=[z_target], lr=config.lr)
 
-            # 3. dds loss optimization and attention maps collection
+            # 3. image optimization and attention maps collection
+            time_to_eps = defaultdict(lambda: None)
             controller.reset()
-            z_target, time_to_eps = image_optimization(
-                pipe,
-                z_source,
-                z_target,
-                text_emb_source,
-                text_emb_target,
-                text_emb_negative,
-                add_time_ids,
-                config.loss_type,
-                config.optimize_timesteps,
-                defaultdict(lambda: None),
-                config,
-                mask_fn,
-            )
-            if config.delay_collection:
-                if not config.collect_with_original_eps:
-                    time_to_eps = defaultdict(lambda: None)
-                controller.reset()
-                image_optimization(
-                    pipe,
-                    z_source,
-                    z_target,
+            for timestep in config.optimize_timesteps:
+                z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+                    z_source, None, timestep
+                )
+                z_t_target, _, _, _, _ = dds_loss.noise_input(z_target, eps, timestep)
+                time_to_eps[timestep] = eps
+                eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
+                    z_t_source,
+                    z_t_target,
+                    t,
                     text_emb_source,
                     text_emb_target,
                     text_emb_negative,
                     add_time_ids,
-                    "none",
-                    config.collect_timesteps,
-                    time_to_eps,
-                    config,
+                    guidance_scale,
                 )
+                mask = None
+                if config.enable_mask:
+                    att_maps = controller.get_average_attention()
+                    mask = aggregate_cross_att(att_maps, pos, config)
+                    max_res = round(sqrt(mask.shape[0]))
+                    mask = mask.view(1, 1, max_res, max_res)
+                    mask = F.interpolate(mask, size=z_target.shape[2:], mode="bilinear")
+                    mask = (mask - mask.min()) / (mask.max() - mask.min())
+                loss, _ = dds_loss.get_loss(
+                    z_target,
+                    alpha_t,
+                    sigma_t,
+                    eps_pred_source,
+                    eps_pred_target,
+                    eps,
+                    config.loss_type,
+                    mask,
+                )
+                optimizer.zero_grad()
+                (config.loss_factor * loss).backward()
+                optimizer.step()
+            if config.delay_collection:
+                controller.reset()
+                for timestep in config.collect_timesteps:
+                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+                        z_source, time_to_eps[timestep], timestep
+                    )
+                    z_t_target, _, _, _, _ = dds_loss.noise_input(
+                        z_target, eps, timestep
+                    )
+                    _, _ = dds_loss.get_eps_prediction(
+                        z_t_source,
+                        z_t_target,
+                        t,
+                        text_emb_source,
+                        text_emb_target,
+                        text_emb_negative,
+                        add_time_ids,
+                        guidance_scale,
+                    )
 
             # 4. refine attention map
             att_maps = controller.get_average_attention()

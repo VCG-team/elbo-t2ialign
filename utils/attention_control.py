@@ -122,7 +122,7 @@ def register_attention_control(
             # in dds loss, we use batched input(batch size = 4)
             # input 0 is negative cond and source img, input 1 is negative cond and target img
             # input 2 is source cond and source img, input 3 is target cond and target img
-            # see DDSLoss.get_eps_prediction in dds_utils.py for more details
+            # see DDSLoss.get_eps_prediction in loss.py for more details
             if not is_cross:
                 source_att = attn[2 * h : 3 * h]
                 # save self attention of source img(take mean for all attention heads)
@@ -148,7 +148,8 @@ def register_attention_control(
 
             out = torch.einsum("b i j, b j d -> b i d", attn, v)
             out = rearrange(out, "(b h) n d -> b n (h d)", h=h)
-            return to_out(out)
+            out = to_out(out)
+            return out
 
         return forward
 
