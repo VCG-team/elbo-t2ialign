@@ -29,7 +29,7 @@ from utils.attention_control import (
 from utils.check_cli_input import merge_cli_cfg
 from utils.datasets import build_dataset
 from utils.img2text import Img2Text
-from utils.loss import DDSLoss
+from utils.loss import CutLoss, DDSLoss
 
 T = torch.Tensor
 TN = Optional[T]
@@ -192,36 +192,47 @@ if __name__ == "__main__":
             z_target = z_source.clone()
             z_target.requires_grad = True
             dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
+            cut_loss = CutLoss(config.n_patches, config.patch_size)
             optimizer = SGD(params=[z_target], lr=config.lr)
 
             # 3. image optimization and attention maps collection
             time_to_eps = defaultdict(lambda: None)
             controller.reset()
             for timestep in config.optimize_timesteps:
-                z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                    z_source, None, timestep
-                )
-                z_t_target, _, _, _, _ = dds_loss.noise_input(z_target, eps, timestep)
-                time_to_eps[timestep] = eps
-                eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
-                    z_t_source,
-                    z_t_target,
-                    t,
-                    text_emb_source,
-                    text_emb_target,
-                    text_emb_negative,
-                    add_time_ids,
-                    guidance_scale,
-                )
-                mask = None
-                if config.enable_mask:
-                    att_maps = controller.get_average_attention()
-                    mask = aggregate_cross_att(att_maps, pos, config)
-                    max_res = round(sqrt(mask.shape[0]))
-                    mask = mask.view(1, 1, max_res, max_res)
-                    mask = F.interpolate(mask, size=z_target.shape[2:], mode="bilinear")
-                    mask = (mask - mask.min()) / (mask.max() - mask.min())
-                loss, _ = dds_loss.get_loss(
+                with (
+                    torch.enable_grad()
+                    if config.loss_type == "cds"
+                    else torch.no_grad()
+                ):
+                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+                        z_source, None, timestep
+                    )
+                    z_t_target, _, _, _, _ = dds_loss.noise_input(
+                        z_target, eps, timestep
+                    )
+                    time_to_eps[timestep] = eps
+                    eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
+                        z_t_source,
+                        z_t_target,
+                        t,
+                        text_emb_source,
+                        text_emb_target,
+                        text_emb_negative,
+                        add_time_ids,
+                        guidance_scale,
+                    )
+                    mask = None
+                    if config.enable_mask:
+                        att_maps = controller.get_average_attention()
+                        mask = aggregate_cross_att(att_maps, pos, config)
+                        max_res = round(sqrt(mask.shape[0]))
+                        mask = mask.view(1, 1, max_res, max_res)
+                        mask = F.interpolate(
+                            mask, size=z_target.shape[2:], mode="bilinear"
+                        )
+                        mask = (mask - mask.min()) / (mask.max() - mask.min())
+                optimizer.zero_grad()
+                tmp_loss = dds_loss.get_loss(
                     z_target,
                     alpha_t,
                     sigma_t,
@@ -231,8 +242,18 @@ if __name__ == "__main__":
                     config.loss_type,
                     mask,
                 )
-                optimizer.zero_grad()
-                (config.loss_factor * loss).backward()
+                loss = config.dds_loss_weight * tmp_loss
+                if config.loss_type == "cds":
+                    tmp_loss = 0
+                    for name, module in pipe.unet.named_modules():
+                        if type(module).__name__ == "Attention":
+                            if hasattr(module, "self_out"):
+                                out = module.self_out
+                                tmp_loss += cut_loss.get_attn_cut_loss(
+                                    out[0:1], out[1:]
+                                )
+                    loss += config.cut_loss_weight * tmp_loss
+                loss.backward()
                 optimizer.step()
             if config.delay_collection:
                 controller.reset()

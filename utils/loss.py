@@ -134,7 +134,6 @@ class DDSLoss:
             p.requires_grad = False
         self.unet = pipe.unet
 
-    @torch.inference_mode()
     def noise_input(self, z: T, eps: TN = None, timestep: Optional[int] = None):
         batch_size = z.shape[0]
         if timestep is None:
@@ -156,7 +155,6 @@ class DDSLoss:
         z_t = alpha_t * z + sigma_t * eps
         return z_t, eps, t, alpha_t, sigma_t
 
-    @torch.inference_mode()
     def get_eps_prediction(
         self,
         z_t_source: T,
@@ -226,14 +224,13 @@ class DDSLoss:
         grad_coef = (alpha_t**self.alpha_exp) * (sigma_t**self.sigma_exp)
         if loss_type == "sds":
             grad = eps_pred_target - eps
-        elif loss_type == "dds":
+        elif loss_type == "dds" or loss_type == "cds":
             grad = eps_pred_target - eps_pred_source
         else:
             raise ValueError(f"Invalid loss type: {loss_type}")
         grad = grad_coef * grad
         if mask is not None:
             grad = grad * mask
-        log_loss = (grad**2).mean()
         loss = z_target * grad.clone()
         loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
-        return loss, log_loss
+        return loss
