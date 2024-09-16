@@ -258,22 +258,23 @@ if __name__ == "__main__":
             if config.delay_collection:
                 controller.reset()
                 for timestep in config.collect_timesteps:
-                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                        z_source, time_to_eps[timestep], timestep
-                    )
-                    z_t_target, _, _, _, _ = dds_loss.noise_input(
-                        z_target, eps, timestep
-                    )
-                    _, _ = dds_loss.get_eps_prediction(
-                        z_t_source,
-                        z_t_target,
-                        t,
-                        text_emb_source,
-                        text_emb_target,
-                        text_emb_negative,
-                        add_time_ids,
-                        guidance_scale,
-                    )
+                    with torch.no_grad():
+                        z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+                            z_source, time_to_eps[timestep], timestep
+                        )
+                        z_t_target, _, _, _, _ = dds_loss.noise_input(
+                            z_target, eps, timestep
+                        )
+                        _, _ = dds_loss.get_eps_prediction(
+                            z_t_source,
+                            z_t_target,
+                            t,
+                            text_emb_source,
+                            text_emb_target,
+                            text_emb_negative,
+                            add_time_ids,
+                            guidance_scale,
+                        )
 
             # 4. refine attention map
             att_maps = controller.get_average_attention()
