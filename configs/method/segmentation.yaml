@@ -26,6 +26,7 @@ target_factor: 0.5 # ratio of target merged into source, result = source + targe
 optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
 loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
 enable_mask: False # whether enable mask for loss calculation
+mask_threshold: 0.3 # threshold for mask
 lr: 1.0e-1 # learning rate
 guidance_scale: null # null or float, if null, use the default value of pipeline
 # dds & sds loss hyperparameters

@@ -225,12 +225,16 @@ if __name__ == "__main__":
                     if config.enable_mask:
                         att_maps = controller.get_average_attention()
                         mask = aggregate_cross_att(att_maps, pos, config)
+                        self_att = aggregate_self_att(att_maps, config)
+                        mask = torch.matmul(self_att, mask)
                         max_res = round(sqrt(mask.shape[0]))
                         mask = mask.view(1, 1, max_res, max_res)
                         mask = F.interpolate(
                             mask, size=z_target.shape[2:], mode="bilinear"
                         )
                         mask = (mask - mask.min()) / (mask.max() - mask.min())
+                        mask[mask >= config.mask_threshold] = 1.0
+                        mask[mask < config.mask_threshold] = 0.0
                 optimizer.zero_grad()
                 tmp_loss = dds_loss.get_loss(
                     z_target,

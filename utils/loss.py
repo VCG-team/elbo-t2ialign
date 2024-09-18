@@ -229,8 +229,10 @@ class DDSLoss:
         else:
             raise ValueError(f"Invalid loss type: {loss_type}")
         grad = grad_coef * grad
-        if mask is not None:
-            grad = grad * mask
         loss = z_target * grad.clone()
-        loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
+        if mask is None:
+            loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
+        else:
+            loss *= mask
+            loss = loss.sum() / mask.sum()
         return loss
