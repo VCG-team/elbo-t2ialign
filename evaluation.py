@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Callable, Dict, List, Tuple
 
+import denseCRF
 import numpy as np
 from joblib import Parallel, delayed
 from omegaconf import OmegaConf
@@ -19,12 +20,43 @@ num_cls = 0
 config = None
 
 
+# denseCRF copied from https://github.com/vpulab/ovam/blob/main/experiments/evaluation/ovam_sa/evaluation_ovam_sa.ipynb
+# use the same param as OVAM(CVPR 2024) https://github.com/vpulab/ovam
+def densecrf(I, P):
+    """
+    input parameters:
+        I    : a numpy array of shape [H, W, C], where C should be 3.
+               type of I should be np.uint8, and the values are in [0, 255]
+        P    : a probability map of shape [H, W, L], where L is the number of classes
+               type of P should be np.float32
+        param: a tuple giving parameters of CRF (w1, alpha, beta, w2, gamma, it), where
+                w1    :   weight of bilateral term, e.g. 10.0
+                alpha :   spatial distance std, e.g., 80
+                beta  :   rgb value std, e.g., 15
+                w2    :   weight of spatial term, e.g., 3.0
+                gamma :   spatial distance std for spatial term, e.g., 3
+                it    :   iteration number, e.g., 5
+    output parameters:
+        out  : a numpy array of shape [H, W], where pixel values represent class indices.
+    """
+    w1 = 10.0  # weight of bilateral term
+    alpha = 80  # spatial std
+    beta = 13  # rgb  std
+    w2 = 3.0  # weight of spatial term
+    gamma = 3  # spatial std
+    it = 5.0  # iteration
+    param = (w1, alpha, beta, w2, gamma, it)
+    out = denseCRF.densecrf(I, P, param)
+    return out
+
+
 def load_gt_and_predict(
     predict_folder: str, data_root: str, gt_list: str
 ) -> List[Tuple]:
     # convert img idx to the predicted cls names
     idx_to_cls = defaultdict(list)
     for predict_file in os.listdir(predict_folder):
+        # predict_file format: {idx}_{cls_name}.png
         idx = int(predict_file.split("_")[0])
         cls = predict_file.split("_")[1].split(".")[0]
         idx_to_cls[idx].append(cls)
@@ -41,12 +73,16 @@ def load_gt_and_predict(
             gt_path = os.path.join(
                 data_root, "annotations", "val2017", f"{name}_labelTrainIds.png"
             )
+            img_path = os.path.join(data_root, "images", "val2017", f"{name}.jpg")
         elif config.dataset == "voc":
             gt_path = os.path.join(data_root, "SegmentationClassAug", f"{name}.png")
+            img_path = os.path.join(data_root, "JPEGImages", f"{name}.jpg")
         elif config.dataset == "context":
             gt_path = os.path.join(data_root, "SegmentationClassContext", f"{name}.png")
+            img_path = os.path.join(data_root, "JPEGImages", f"{name}.jpg")
         elif config.dataset == "voc_sim" or config.dataset == "coco_cap":
             gt_path = os.path.join(data_root, "annotations", f"{name}.png")
+            img_path = os.path.join(data_root, "images", f"{name}.png")
         else:
             sys.exit("unknown dataset")
         gt = np.array(Image.open(gt_path))
@@ -76,19 +112,21 @@ def load_gt_and_predict(
         predict_value = np.max(predict, axis=0)
         predict = np.argmax(predict, axis=0).astype(np.uint8)
 
-        return (gt, predict_value, predict, idx)
+        return (gt, predict_value, predict, idx, img_path)
 
     # use joblib with tqdm to load gt and predict in parallel
     # see: https://stackoverflow.com/a/77948954/12389770
-    results = Parallel(n_jobs=4, return_as="generator")(
+    results = Parallel(n_jobs=config.n_jobs, return_as="generator")(
         delayed(process)(idx) for idx in range(len(name_list))
     )
     return list(tqdm(results, desc="loading gt and predict...", total=len(name_list)))
 
 
-def apply_threshold(gt_and_predict: List[Tuple], threshold: float) -> List[Tuple]:
+def apply_threshold(
+    gt_and_predict: List[Tuple], threshold: float, enable_crf: bool = False
+) -> List[Tuple]:
 
-    def process(gt, predict_value, predict, img_idx):
+    def process(gt, predict_value, predict, img_idx, img_path):
         # store instance level statistics, notice one image has multiple instances
         instance_statistics = []
 
@@ -100,11 +138,20 @@ def apply_threshold(gt_and_predict: List[Tuple], threshold: float) -> List[Tuple
         predict_copy = predict.copy()
         predict_copy[background] = 0
 
+        # apply denseCRF
+        if enable_crf:
+            img = np.array(Image.open(img_path))
+            probability = np.zeros((h, w, num_cls), np.float32)
+            cls_idxes = np.unique(predict_copy)
+            for cls_idx in cls_idxes:
+                probability[predict_copy == cls_idx, cls_idx] = 1
+            predict_copy = densecrf(img, probability)
+
         # we follow MCTFormer (CVPR 2022) to prepare VOCaug dataset annotations.
         # so we only use valid region to compute metrics in VOCaug dataset.
         # related code: https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py#L40
         if config.dataset == "voc":
-            predict_copy[gt == 255] = 255
+            predict_copy[gt == 255] = np.array(255).astype(np.int8)
 
         # get instance level statistics for each class
         p = dict(zip(*np.unique(predict_copy, return_counts=True)))
@@ -122,8 +169,17 @@ def apply_threshold(gt_and_predict: List[Tuple], threshold: float) -> List[Tuple
 
     # apply threshold in parallel with joblib
     # related docs: https://joblib.readthedocs.io/en/latest/parallel.html#embarrassingly-parallel-for-loops
-    results = Parallel(n_jobs=4)(delayed(process)(*item) for item in gt_and_predict)
-    return sum(results, [])
+    results = Parallel(n_jobs=config.n_jobs, return_as="generator")(
+        delayed(process)(*item) for item in gt_and_predict
+    )
+    # provide a progress bar for denseCRF
+    if enable_crf:
+        results = tqdm(
+            results,
+            desc="collecting metrics with denseCRF...",
+            total=len(gt_and_predict),
+        )
+    return sum(list(results), [])
 
 
 def apply_metrics(
@@ -277,21 +333,16 @@ if __name__ == "__main__":
         f"threshold range: {config.start/100}-{config.end/100}, best threshold: {l/100}, best key metric: {l_info['key_metric']:.3f}"
     )
 
-    # collect other metrics
-    print("collecting other metrics...", end="")
+    # collect metrics without denseCRF
+    print("collecting metrics without denseCRF...")
     log = {"best threshold": l / 100}
-
     # 1. overall metrics with best threshold
     metrics = apply_metrics(l_info["statistics"], bucket_num=1)
     log.update({"overall": metrics})
-
     # 2. background class metrics with best threshold
     metrics = apply_metrics(l_info["statistics"], filter_fn=lambda x: x[5] == 0)
     log.update({"background": metrics})
-
-    # 3. metrics of all foreground classes at the best threshold
-    # sorted by the ratio of gt to img size
-    # divide the data into blocks
+    # 3. metrics of all foreground classes at the best threshold, sorted by the ratio of gt to img size, divide the data into blocks
     metrics = apply_metrics(
         l_info["statistics"],
         filter_fn=lambda x: x[5] != 0,
@@ -299,10 +350,7 @@ if __name__ == "__main__":
         bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t_area)": metrics})
-
-    # 4. metrics of all foreground classes at the best threshold
-    # sorted by the size of gt
-    # divide the data into blocks
+    # 4. metrics of all foreground classes at the best threshold, sorted by the size of gt, divide the data into blocks
     metrics = apply_metrics(
         l_info["statistics"],
         filter_fn=lambda x: x[5] != 0,
@@ -310,9 +358,41 @@ if __name__ == "__main__":
         bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t)": metrics})
-
+    # 5. write metrics to json
     metrics_output_path = os.path.join(config.output_path, "segmentation_metrics.json")
     with open(metrics_output_path, "w") as f:
         json.dump(log, f, indent=4)
 
-    print("done")
+    # collect metrics with denseCRF
+    log = {"best threshold": l / 100}
+    instance_statistics = apply_threshold(gt_and_predict, l / 100, enable_crf=True)
+    # 1. overall metrics with best threshold
+    metrics = apply_metrics(instance_statistics, bucket_num=1)
+    log.update({"overall": metrics})
+    # 2. background class metrics with best threshold
+    metrics = apply_metrics(instance_statistics, filter_fn=lambda x: x[5] == 0)
+    log.update({"background": metrics})
+    # 3. metrics of all foreground classes at the best threshold, sorted by the ratio of gt to img size, divide the data into blocks
+    metrics = apply_metrics(
+        instance_statistics,
+        filter_fn=lambda x: x[5] != 0,
+        sort_fn=lambda x: x[1] / (x[3] * x[4]),
+        bucket_num=config.bucket_num,
+    )
+    log.update({"foreground(sort by t_area)": metrics})
+    # 4. metrics of all foreground classes at the best threshold, sorted by the size of gt, divide the data into blocks
+    metrics = apply_metrics(
+        instance_statistics,
+        filter_fn=lambda x: x[5] != 0,
+        sort_fn=lambda x: int(x[1]),
+        bucket_num=config.bucket_num,
+    )
+    log.update({"foreground(sort by t)": metrics})
+    # 5. write metrics to json
+    metrics_output_path = os.path.join(
+        config.output_path, "segmentation_metrics_crf.json"
+    )
+    with open(metrics_output_path, "w") as f:
+        json.dump(log, f, indent=4)
+
+    print("finish evaluation.")
