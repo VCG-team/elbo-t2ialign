@@ -43,7 +43,6 @@ if __name__ == "__main__":
     _ = torch.set_grad_enabled(False)
     nlp = spacy.load("en_core_web_sm")
 
-    clip_device = torch.device(config.clip.device)
     clip_dtype = torch.float16 if config.clip.dtype == "fp16" else torch.float32
     clip_tokenizer = CLIPTokenizer.from_pretrained(
         config.clip.variant, cache_dir=config.model_dir
@@ -57,7 +56,8 @@ if __name__ == "__main__":
         use_safetensors=True,
         cache_dir=config.model_dir,
         torch_dtype=clip_dtype,
-    ).to(clip_device)
+        device_map=config.clip.device_map,
+    )
     clip_model = torch.compile(clip_model, mode="reduce-overhead", fullgraph=True)
 
     img2text = Img2Text(config)
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         # related code: https://github.com/huggingface/transformers/blob/v4.40.1/src/transformers/models/clip/modeling_clip.py#L932
         # related docs: https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel
         labels_input = clip_tokenizer(labels, padding=True, return_tensors="pt")
-        labels_input = labels_input.to(clip_device)
+        labels_input = labels_input.to(clip_model.device)
         labels_features = clip_model.get_text_features(**labels_input)
         labels_features = labels_features / labels_features.norm(
             p=2, dim=-1, keepdim=True
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     if config.enable_text_and_image_similarity:
         sentences = [f"a photograph of {label}" for label in labels]
         sentences_input = clip_tokenizer(sentences, padding=True, return_tensors="pt")
-        sentences_input = sentences_input.to(clip_device)
+        sentences_input = sentences_input.to(clip_model.device)
         sentences_features = clip_model.get_text_features(**sentences_input)
         sentences_features = sentences_features / sentences_features.norm(
             p=2, dim=-1, keepdim=True
@@ -133,7 +133,7 @@ if __name__ == "__main__":
         # 3. cos similariry of image and text to predict label
         if config.enable_text_and_image_similarity:
             image_input = clip_processor(images=image, return_tensors="pt")
-            image_input = image_input.to(clip_device)
+            image_input = image_input.to(clip_model.device)
             image_features = clip_model.get_image_features(**image_input)
             image_features = image_features / image_features.norm(
                 p=2, dim=-1, keepdim=True
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         # 4. cos similarity of text embdding to predict label
         if config.enable_text_similarity and noun:
             noun_input = clip_tokenizer(list(noun), padding=True, return_tensors="pt")
-            noun_input = noun_input.to(clip_device)
+            noun_input = noun_input.to(clip_model.device)
             noun_features = clip_model.get_text_features(**noun_input)
             noun_features = noun_features / noun_features.norm(
                 p=2, dim=-1, keepdim=True

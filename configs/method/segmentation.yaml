@@ -1,12 +1,25 @@
 # segmentation process settings (segmentation.py)
 use_img2text: True
+source_template: "a photograph of {}" # source img prompt = prompt_template.format(source_class)
+target_template: "a photograph of {}" # target img prompt = prompt_template.format(special_token)
 special_token: "''"
 # see ./configs/io/io.yaml for details
 # by io.yaml default, use_cls_prediction is False
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset
 use_cls_predict: True
+optimize_timesteps: # timesteps to optimize image, format: [start, end, step]
+  - [1, 2, 1]
+  - [25, 151, 25]
 delay_collection: False # whether to delay the collection of attention maps
-collect_timesteps: [1, 25, 50, 75, 100, 125, 150] # timesteps to collect attention maps, only valid when delay_collection is True
+collect_timesteps: # timesteps to collect attention maps, only valid when delay_collection is True, format: [start, end, step]
+  - [1, 2, 1]
+  - [25, 151, 25]
+loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
+enable_mask: False # whether enable mask for loss calculation
+mask_threshold: 0.3 # mask threshold for loss calculation
+lr: 1.0e-1 # learning rate
+guidance_scale: null # null or float, if null, use the default value of pipeline
+save_img: False # whether to save optimized images(decoded z_target)
 
 # attention control settings (attention_control.py)
 # diffusion models use unet/dit with cross/self attentions to predict noise
@@ -23,12 +36,6 @@ merge_type: "latent" # merge 'latent' or 'attention' of target and source image
 target_factor: 0.5 # ratio of target merged into source, result = source + target_factor * (source - target)
 
 # loss settings (loss.py)
-optimize_timesteps: [1, 25, 50, 75, 100, 125, 150]
-loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
-enable_mask: False # whether enable mask for loss calculation
-mask_threshold: 0.3 # threshold for mask
-lr: 1.0e-1 # learning rate
-guidance_scale: null # null or float, if null, use the default value of pipeline
 # dds & sds loss hyperparameters
 dds_loss_weight: 2000.0 # coefficient of dds loss
 alpha_exp: 0.0

@@ -17,24 +17,24 @@ use_cls_predict: False
 # if leave empty, use default path: output_path/cls_predict.npy
 cls_predict: ""
 
-# cache config
+# cache path to save generated text
 cache_dir: "./tmp/cache"
-
-# model path
+# cache path to save models
 model_dir: "./models"
+
 diffusion:
   variant: "runwayml/stable-diffusion-v1-5"
-  device: 0
+  device_map: "balanced"
   dtype: "fp16"
-
 clip:
   variant: "openai/clip-vit-large-patch14"
-  device: 0
+  device_map: "balanced"
   dtype: "fp32"
-
 img2text:
   variant: "Salesforce/blip-image-captioning-large"
-  device: 0
+  # some img2text models still don't support balanced device_map
+  # see: https://github.com/huggingface/transformers/issues/29786
+  device_map: "cuda:0"
   dtype: "fp32"
   # if api_url is not None, use api to convert image to text
   api_key: null

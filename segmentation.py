@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from compel import Compel, ReturnedEmbeddingsType
 from cv2 import imwrite
 from diffusers import (
-    DiffusionPipeline,
+    AutoPipelineForText2Image,
     StableDiffusionPipeline,
     StableDiffusionXLPipeline,
 )
@@ -37,7 +37,7 @@ TS = Union[Tuple[T, ...], List[T]]
 
 
 @torch.inference_mode()
-def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
+def encode_prompt(pipe: AutoPipelineForText2Image, text: str) -> Tuple[T, TN]:
     # use compel to do prompt weighting
     # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
     if isinstance(pipe, StableDiffusionPipeline):
@@ -56,13 +56,22 @@ def get_text_embeddings(pipe: DiffusionPipeline, text: str) -> Tuple[T, TN]:
 
 
 @torch.inference_mode()
-def get_image_embeddings(pipe: DiffusionPipeline, image: Image):
+def encode_vae_image(pipe: AutoPipelineForText2Image, image: Image):
     vae = pipe.vae
     size, scaling_factor = vae.config.sample_size, vae.config.scaling_factor
     img_tensor = pipe.image_processor.preprocess(image, size, size)
     img_tensor = img_tensor.to(vae.device, dtype=vae.dtype)
     z_tensor = vae.encode(img_tensor)["latent_dist"].mean * scaling_factor
-    return z_tensor.to(pipe.device, dtype=pipe.dtype)
+    return z_tensor.to(pipe.unet.device, dtype=pipe.unet.dtype)
+
+
+@torch.inference_mode()
+def decode_latent(pipe: AutoPipelineForText2Image, latent: T) -> Image:
+    vae = pipe.vae
+    scaling_factor = vae.config.scaling_factor
+    latent = latent.to(vae.device, dtype=vae.dtype)
+    img_tensor = vae.decode(latent / scaling_factor, return_dict=False)[0]
+    return pipe.image_processor.postprocess(img_tensor)
 
 
 if __name__ == "__main__":
@@ -92,25 +101,30 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    img_output_path = os.path.join(config.output_path, "images")
-    if os.path.exists(img_output_path):
-        shutil.rmtree(img_output_path)
-    os.makedirs(img_output_path, exist_ok=True)
+    mask_out_path = os.path.join(config.output_path, "masks")
+    if os.path.exists(mask_out_path):
+        shutil.rmtree(mask_out_path)
+    os.makedirs(mask_out_path, exist_ok=True)
+    if config.save_img:
+        img_out_path = os.path.join(config.output_path, "images")
+        if os.path.exists(img_out_path):
+            shutil.rmtree(img_out_path)
+        os.makedirs(img_out_path, exist_ok=True)
     dataset = build_dataset(config)
     category = list(config.category.keys())
     if config.use_img2text:
         img2text = Img2Text(config)
 
-    diffusion_device = torch.device(config.diffusion.device)
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
     )
-    pipe = DiffusionPipeline.from_pretrained(
+    pipe = AutoPipelineForText2Image.from_pretrained(
         config.diffusion.variant,
         torch_dtype=diffusion_dtype,
         use_safetensors=True,
         cache_dir=config.model_dir,
-    ).to(diffusion_device)
+        device_map=config.diffusion.device_map,
+    )
     pipe.image_processor.config.resample = "bilinear"
     # The VAE is in float32 to avoid NaN losses
     # see: https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image_sdxl.py#L712
@@ -119,7 +133,7 @@ if __name__ == "__main__":
     controller = AttentionStore()
     register_attention_control(pipe, controller, config)
 
-    text_emb_negative = get_text_embeddings(pipe, "")
+    text_emb_negative = encode_prompt(pipe, "")
     if config.guidance_scale is not None:
         guidance_scale = config.guidance_scale
     elif isinstance(pipe, StableDiffusionPipeline):
@@ -139,7 +153,7 @@ if __name__ == "__main__":
             (img_size, img_size),
             dtype=text_emb_negative[1].dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
-        ).to(diffusion_device)
+        ).to(pipe.unet.device)
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
@@ -148,18 +162,20 @@ if __name__ == "__main__":
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
         labels = torch.where(label)[0].tolist()
-        z_source = get_image_embeddings(pipe, img)
+        z_source = encode_vae_image(pipe, img)
 
         # generate mask for each label in the image
         for cls_idx in labels:
             # 1. generate text prompts
             cls_name = category[cls_idx]
+            text_source = config.source_template.format(cls_name)
+            text_target = config.target_template.format(config.special_token)
             # miuns 2 to remove [START] and [END] tokens
             cls_name_len = len(pipe.tokenizer.encode(cls_name)) - 2
-            text_source = f"a photograph of {cls_name}"
-            text_target = f"a photograph of {config.special_token}"
-            # pos for cls_name in text_source, 1 for [START], 3 for a photograph of, 4 = 1 + 3
-            pos = [4 + i for i in range(cls_name_len)]
+            # get the position of cls_name occurrence in the source prompt template
+            cls_name_start = config.source_template.split(" ").index("{}")
+            # pos for cls_name in text_source, add 1 for [START] token
+            pos = [1 + cls_name_start + i for i in range(cls_name_len)]
 
             if config.use_img2text:
                 # use large multimodal model to convert img to text
@@ -187,8 +203,8 @@ if __name__ == "__main__":
                 )
 
             # 2. prepare image optimization input, loss, and optimizer
-            text_emb_source = get_text_embeddings(pipe, text_source)
-            text_emb_target = get_text_embeddings(pipe, text_target)
+            text_emb_source = encode_prompt(pipe, text_source)
+            text_emb_target = encode_prompt(pipe, text_target)
             z_target = z_source.clone()
             z_target.requires_grad = True
             dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
@@ -198,7 +214,12 @@ if __name__ == "__main__":
             # 3. image optimization and attention maps collection
             time_to_eps = defaultdict(lambda: None)
             controller.reset()
-            for timestep in config.optimize_timesteps:
+            optimize_timesteps = [
+                timestep
+                for start, end, step in config.optimize_timesteps
+                for timestep in range(start, end, step)
+            ]
+            for timestep in optimize_timesteps:
                 with (
                     torch.enable_grad()
                     if config.loss_type == "cds"
@@ -261,7 +282,12 @@ if __name__ == "__main__":
                 optimizer.step()
             if config.delay_collection:
                 controller.reset()
-                for timestep in config.collect_timesteps:
+                collect_timesteps = [
+                    timestep
+                    for start, end, step in config.collect_timesteps
+                    for timestep in range(start, end, step)
+                ]
+                for timestep in collect_timesteps:
                     with torch.no_grad():
                         z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
                             z_source, time_to_eps[timestep], timestep
@@ -280,16 +306,20 @@ if __name__ == "__main__":
                             guidance_scale,
                         )
 
-            # 4. refine attention map
+            # 4. refine attention map as mask
             att_maps = controller.get_average_attention()
             mask = aggregate_cross_att(att_maps, pos, config)
             self_att = aggregate_self_att(att_maps, config)
             mask = torch.matmul(self_att, mask)
 
-            # 5. save attention map as mask
+            # 5. save mask and target img
             max_res = round(sqrt(mask.shape[0]))
             mask = mask.view(1, 1, max_res, max_res)
-            mask: torch.Tensor = F.interpolate(mask, size=(h, w), mode="bilinear")
+            mask: T = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
-            imwrite(f"{img_output_path}/{k}_{cls_name}.png", mask)
+            imwrite(f"{mask_out_path}/{k}_{cls_name}.png", mask)
+            if config.save_img:
+                img = decode_latent(pipe, z_target)[0]
+                img = img.resize((w, h))
+                img.save(f"{img_out_path}/{k}_{cls_name}.png")

@@ -5,7 +5,7 @@ from typing import Dict, List
 
 import torch
 import torch.nn.functional as F
-from diffusers import DiffusionPipeline
+from diffusers import AutoPipelineForText2Image
 from einops import rearrange
 from omegaconf import DictConfig
 from torch.distributions import Normal
@@ -91,7 +91,7 @@ class AttentionStore(AttentionControl):
 
 
 def register_attention_control(
-    pipe: DiffusionPipeline,
+    pipe: AutoPipelineForText2Image,
     controller: AttentionStore,
     config: DictConfig,
 ):

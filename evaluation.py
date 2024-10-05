@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import warnings
 from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Callable, Dict, List, Tuple
@@ -269,6 +270,8 @@ def get_key_metric(gt_and_predict: List[Tuple], threshold: float):
 
 if __name__ == "__main__":
 
+    warnings.filterwarnings("ignore")
+
     parser = ArgumentParser()
     parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
     parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
@@ -291,7 +294,7 @@ if __name__ == "__main__":
     if config.start >= config.end:
         sys.exit("start threshold should be less than end")
 
-    predict_dir = os.path.join(config.output_path, "images")
+    predict_dir = os.path.join(config.output_path, "masks")
     category = list(config.category.keys())
     category.insert(0, "background")
     num_cls = len(category)

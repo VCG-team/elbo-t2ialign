@@ -10,11 +10,36 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            "args": []
+        },
+        {
+            "name": "Python Debugger: segmentation.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/segmentation.py",
+            "console": "integratedTerminal",
             "args": [
                 "use_cls_predict=False",
                 "delay_collection=False",
-                "target_factor=0",
+                "target_factor=0.5",
+                "loss_type=cds"
             ]
+        },
+        {
+            "name": "Python Debugger: classification.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/classification.py",
+            "console": "integratedTerminal",
+            "args": []
+        },
+        {
+            "name": "Python Debugger: evaluation.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/evaluation.py",
+            "console": "integratedTerminal",
+            "args": []
         }
     ]
 }

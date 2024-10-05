@@ -17,7 +17,6 @@ class Img2Text:
             self.dtype = (
                 torch.float16 if config.img2text.dtype == "fp16" else torch.float32
             )
-            self.device = torch.device(config.img2text.device)
             self.processor = AutoProcessor.from_pretrained(
                 self.variant, cache_dir=config.model_dir
             )
@@ -26,7 +25,8 @@ class Img2Text:
                 cache_dir=config.model_dir,
                 torch_dtype=self.dtype,
                 use_safetensors=True,
-            ).to(self.device)
+                device_map=config.img2text.device_map,
+            )
             self.model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
             cache_path = join(
                 config.cache_dir,
@@ -59,7 +59,7 @@ class Img2Text:
     @torch.inference_mode()
     def _get_text_locally(self, img: Image, prompt: str) -> str:
         model_input = self.processor(images=img, text=prompt, return_tensors="pt")
-        model_input = model_input.to(self.device)
+        model_input = model_input.to(self.model.device)
         model_out = self.model.generate(**model_input)[0]
         text: str = self.processor.decode(
             model_out, skip_special_tokens=True, clean_up_tokenization_spaces=True

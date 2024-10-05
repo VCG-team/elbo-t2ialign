@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from diffusers import DiffusionPipeline
+from diffusers import AutoPipelineForText2Image
 
 T = torch.Tensor
 TN = Optional[T]
@@ -113,7 +113,7 @@ class DDSLoss:
 
     def __init__(
         self,
-        pipe: DiffusionPipeline,
+        pipe: AutoPipelineForText2Image,
         alpha_exp=0.0,
         sigma_exp=0.0,
     ):
@@ -128,8 +128,8 @@ class DDSLoss:
         with torch.inference_mode():
             alphas = torch.sqrt(pipe.scheduler.alphas_cumprod)
             sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod)
-        self.alphas = alphas.to(pipe.device, dtype=pipe.dtype)
-        self.sigmas = sigmas.to(pipe.device, dtype=pipe.dtype)
+        self.alphas = alphas.to(pipe.unet.device, dtype=pipe.dtype)
+        self.sigmas = sigmas.to(pipe.unet.device, dtype=pipe.dtype)
         for p in pipe.unet.parameters():
             p.requires_grad = False
         self.unet = pipe.unet
