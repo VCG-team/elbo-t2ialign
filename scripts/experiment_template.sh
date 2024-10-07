@@ -1,0 +1,61 @@
+#!/bin/bash
+# find least used gpu, min memory first, min utilization second
+# set device to "" to use all gpus
+device=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv | sed '1d' | sort -t ',' -k 2,2n -k 3,3n | head -n 1 | cut -d ',' -f 1)
+
+# get script name as output folder name(remove file extension)
+output_folder=$(basename $0 | rev | cut -d '.' -f 2- | rev)
+output_path="./output/${output_folder}"
+
+# experiment datasets
+datasets=("voc_sim" "coco_cap" "voc" "context" "coco")
+# which dataset variant to use, supported:
+# 1. "": original dataset
+# 2. "_100": small dataset(100 images) randomly selected from original dataset
+# 3. "_10_car": small dataset(10 images) randomly selected from original dataset with car class
+dataset_suffix=""
+
+# when using small dataset, we recommend saving target images to visualize editing results
+if [ "${dataset_suffix}" = "" ]; then
+    save_img=False
+else
+    save_img=True
+fi
+# optionally using classification.py to get class labels
+use_cls_predict=False
+
+# classification.py arguments using here document, see full list of options in config folder
+classification_args=$(cat << EOS
+EOS
+)
+
+# segmentation.py arguments using here document, see full list of options in config folder
+# clip.variant options: openai/clip-vit-large-patch14
+# img2text.variant options: Salesforce/blip-image-captioning-large, Salesforce/blip2-opt-2.7b
+# diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0
+segmentation_args=$(cat << EOS
+save_img=${save_img}
+use_cls_predict=${use_cls_predict}
+optimize_timesteps=[[200,0,-1]]
+delay_collection=True
+collect_timesteps=[[1,2,1],[25,151,25]]
+target_factor=0.5
+diffusion.variant=stabilityai/sdxl-turbo
+cross_gaussian_var=3
+self_gaussian_var=[15,2]
+loss_type=cds
+enable_mask=True
+EOS
+)
+
+for dataset in ${datasets[@]}
+do
+    # 1. optional classification
+    if [ "${use_cls_predict}" = "True" ]; then
+        CUDA_VISIBLE_DEVICES=${device} python classification.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt ${classification_args}
+    fi
+    # 2. segmentation
+    CUDA_VISIBLE_DEVICES=${device} python segmentation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt ${segmentation_args}
+    # 3. evaluation
+    python evaluation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt
+done

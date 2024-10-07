@@ -72,46 +72,9 @@ Reproducing the results will need about 10G GPU memory. We are still working on 
 
 To test different settings, you can change configuration files in `config` folder, or pass command line arguments following [OmegaConf](https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#usage).
 
+We provide a experiment script template `./scripts/experiment_template.sh` to run experiments. You can modify the script to run different experiments.
+
 Welcome to open an issue if you have any questions. 
-
-### Reproduce PASCAL VOC Results
-
-```bash
-# 1. classification
-python classification.py --dataset-cfg ./configs/dataset/voc.yaml
-# 2. segmentation
-python segmentation.py --dataset-cfg ./configs/dataset/voc.yaml
-# 3. evaluation
-python evaluation.py --dataset-cfg ./configs/dataset/voc.yaml
-```
-
-After running the above script, results will be saved at `./output/voc`. You can change the output folder by modifying `./configs/io/io.yaml`.
-
-### Reproduce PASCAL Context Results
-
-```bash
-# 1. classification
-python classification.py --dataset-cfg ./configs/dataset/context.yaml
-# 2. segmentation
-python segmentation.py --dataset-cfg ./configs/dataset/context.yaml
-# 3. evaluation
-python evaluation.py --dataset-cfg ./configs/dataset/context.yaml
-```
-
-After running the above script, results will be saved at `./output/context`. You can change the output folder by modifying `./configs/io/io.yaml`.
-
-### Reproduce COCO Results
-
-```bash
-# 1. classification
-python classification.py --dataset-cfg ./configs/dataset/coco.yaml
-# 2. segmentation
-python segmentation.py --dataset-cfg ./configs/dataset/coco.yaml
-# 3. evaluation
-python evaluation.py --dataset-cfg ./configs/dataset/coco.yaml
-```
-
-After running the above script, results will be saved at `./output/coco`. You can change the output folder by modifying `./configs/io/io.yaml`.
 
 ## Credits
 

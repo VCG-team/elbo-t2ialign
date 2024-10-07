@@ -78,6 +78,7 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
+    # parse arguments for configuration files
     parser = ArgumentParser()
     parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
     parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
@@ -85,12 +86,18 @@ if __name__ == "__main__":
         "--method-cfg", type=str, default="./configs/method/segmentation.yaml"
     )
     args, unknown = parser.parse_known_args()
-
     dataset_cfg = OmegaConf.load(args.dataset_cfg)
     io_cfg = OmegaConf.load(args.io_cfg)
     method_cfg = OmegaConf.load(args.method_cfg)
-    cli_cfg = OmegaConf.from_dotlist(unknown)
-
+    # parse arguments for command line configuration
+    cli_args = []
+    for arg in unknown:
+        if "=" in arg:
+            cli_args.append(arg)
+        else:
+            cli_args[-1] += f" {arg}"
+    cli_cfg = OmegaConf.from_dotlist(cli_args)
+    # merge all configurations
     config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg)
     config = merge_cli_cfg(config, cli_cfg)
     config.output_path = config.output_path[config.dataset]
