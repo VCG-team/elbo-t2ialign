@@ -104,7 +104,7 @@ def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
 
 
 def apply_threshold(
-    gt_and_predict: List[Tuple], threshold: float, enable_crf: bool = False
+    gt_and_predict: List[Tuple], threshold: float, enable_crf=False, save_mask=False
 ) -> List[Tuple]:
 
     def process(gt, predict_value, predict, img_idx, img_path):
@@ -118,6 +118,11 @@ def apply_threshold(
         background = predict_value < threshold
         predict_copy = predict.copy()
         predict_copy[background] = 0
+
+        # save mask
+        if save_mask:
+            mask = Image.fromarray(predict_copy)
+            mask.save(os.path.join(config.output_path, "masks", f"{img_idx}.png"))
 
         # apply denseCRF
         if enable_crf:
@@ -280,12 +285,12 @@ if __name__ == "__main__":
 
     if config.start >= config.end:
         sys.exit("start threshold should be less than end")
-
-    predict_dir = os.path.join(config.output_path, "masks")
+    if config.save_mask:
+        os.makedirs(os.path.join(config.output_path, "masks"), exist_ok=True)
+    predict_dir = os.path.join(config.output_path, "heatmaps")
     category = list(config.category.keys())
     category.insert(0, "background")
     num_cls = len(category)
-
     gt_and_predict = load_gt_and_predict(predict_dir, config)
 
     # binary search to find the best threshold for key metric
@@ -353,7 +358,9 @@ if __name__ == "__main__":
 
     # collect metrics with denseCRF
     log = {"best threshold": l / 100}
-    instance_statistics = apply_threshold(gt_and_predict, l / 100, enable_crf=True)
+    instance_statistics = apply_threshold(
+        gt_and_predict, l / 100, enable_crf=True, save_mask=config.save_mask
+    )
     # 1. overall metrics with best threshold
     metrics = apply_metrics(instance_statistics, bucket_num=1)
     log.update({"overall": metrics})

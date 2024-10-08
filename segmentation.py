@@ -108,7 +108,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-    mask_out_path = os.path.join(config.output_path, "masks")
+    mask_out_path = os.path.join(config.output_path, "heatmaps")
     if os.path.exists(mask_out_path):
         shutil.rmtree(mask_out_path)
     os.makedirs(mask_out_path, exist_ok=True)

@@ -3,3 +3,4 @@ start: 10 # evaluation start threshold.
 end: 90 # evaluation end threshold.
 bucket_num: 10 # The number of data buckets. Log file saves evaluation results for each bucket.
 n_jobs: 6 # number of jobs when using Parallel
+save_mask: False # whether save mask after applying threshold

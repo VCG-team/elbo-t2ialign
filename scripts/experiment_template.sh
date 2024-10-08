@@ -15,21 +15,23 @@ datasets=("voc_sim" "coco_cap" "voc" "context" "coco")
 # 3. "_10_car": small dataset(10 images) randomly selected from original dataset with car class
 dataset_suffix=""
 
-# when using small dataset, we recommend saving target images to visualize editing results
+# when using small dataset, we recommend saving target images and generated masks to visualize editing results
 if [ "${dataset_suffix}" = "" ]; then
     save_img=False
+    save_mask=False
 else
     save_img=True
+    save_mask=True
 fi
 # optionally using classification.py to get class labels
 use_cls_predict=False
 
-# classification.py arguments using here document, see full list of options in config folder
+# classification.py arguments using here document, see full list of options in ./config/method/classification.yaml
 classification_args=$(cat << EOS
 EOS
 )
 
-# segmentation.py arguments using here document, see full list of options in config folder
+# segmentation.py arguments using here document, see full list of options in ./config/method/segmentation.yaml
 # clip.variant options: openai/clip-vit-large-patch14
 # img2text.variant options: Salesforce/blip-image-captioning-large, Salesforce/blip2-opt-2.7b
 # diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0
@@ -48,6 +50,12 @@ enable_mask=True
 EOS
 )
 
+# evaluation.py arguments using here document, see full list of options in ./config/method/evaluation.yaml
+evaluation_args=$(cat << EOS
+save_mask=${save_mask}
+EOS
+)
+
 for dataset in ${datasets[@]}
 do
     # 1. optional classification
@@ -57,5 +65,5 @@ do
     # 2. segmentation
     CUDA_VISIBLE_DEVICES=${device} python segmentation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt ${segmentation_args}
     # 3. evaluation
-    python evaluation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt
+    python evaluation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset}${dataset_suffix} data_name_list=./data/${dataset}/val_id${dataset_suffix}.txt ${evaluation_args}
 done
