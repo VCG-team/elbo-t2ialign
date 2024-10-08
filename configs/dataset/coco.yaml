@@ -3,6 +3,8 @@ dataset: "coco"
 data_root: "./datasets/coco_stuff164k"
 data_name_list: "./data/coco/val_id.txt"
 name_to_cls_labels: "./data/coco/cls_labels.npy"
+img_path: "{data_root}/images/val2017/{img_name}.jpg"
+gt_path: "{data_root}/annotations/val2017/{img_name}_labelTrainIds.png"
 # we follow mmsegmentation to prepare dataset.
 # so categories in coco dataset are the same with mmsegmentation.
 # related code: https://github.com/open-mmlab/mmsegmentation/blob/main/mmseg/datasets/coco_stuff.py

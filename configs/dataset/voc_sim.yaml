@@ -5,6 +5,8 @@ dataset: "voc_sim"
 data_root: "./datasets/voc_sim"
 data_name_list: "./data/voc_sim/val_id.txt"
 name_to_cls_labels: "./data/voc_sim/cls_labels.npy"
+img_path: "{data_root}/images/{img_name}.png"
+gt_path: "{data_root}/annotations/{img_name}.png"
 num_cls: 20 # not including background
 category:
   plane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]

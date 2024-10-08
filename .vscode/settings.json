@@ -16,4 +16,5 @@
         "--profile",
         "black"
     ],
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
 }

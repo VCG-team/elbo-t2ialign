@@ -1,12 +1,10 @@
 # Modified from MCTFormer(CVPR 2022) https://github.com/xulianuwa/MCTformer/blob/main/datasets.py
 import os
-import sys
-from typing import Dict
+from typing import Tuple
 
 import numpy as np
 import torch
 from omegaconf import DictConfig
-from PIL import Image
 from torch.utils.data import Dataset
 
 
@@ -26,161 +24,33 @@ def load_image_label_list_from_npy(img_name_list, label_file_path):
     return label_list
 
 
-class VOC12Dataset(Dataset):
+class SegDataset(Dataset):
     def __init__(
         self,
-        img_name_list_path="./data/voc/val_id.txt",
-        voc12_root="./datasets/VOCdevkit/VOC2012",
-        label_file_path="./data/voc/cls_labels.npy",
+        config: DictConfig,
     ):
-        self.img_name_list = load_img_name_list(img_name_list_path)
-        self.label_list = load_image_label_list_from_npy(
-            self.img_name_list, label_file_path
-        )
-        self.voc12_root = voc12_root
-        self.train = "train" in img_name_list_path
-
-    def __getitem__(self, idx):
-        name = self.img_name_list[idx]
-        img = Image.open(
-            os.path.join(self.voc12_root, "JPEGImages", f"{name}.jpg")
-        ).convert("RGB")
-        label = torch.from_numpy(self.label_list[idx])
-        return img, label, name
-
-    def __len__(self):
-        return len(self.img_name_list)
-
-
-class VOCContextDataset(Dataset):
-    def __init__(
-        self,
-        img_name_list_path="./data/context/val_id.txt",
-        voc10_root="./datasets/VOCdevkit/VOC2010",
-        label_file_path="./data/context/cls_labels.npy",
-    ):
-        self.img_name_list = load_img_name_list(img_name_list_path)
-        self.label_list = load_image_label_list_from_npy(
-            self.img_name_list, label_file_path
-        )
-        self.voc10_root = voc10_root
-        self.train = "train" in img_name_list_path
-
-    def __getitem__(self, idx):
-        name = self.img_name_list[idx]
-        img = Image.open(
-            os.path.join(self.voc10_root, "JPEGImages", f"{name}.jpg")
-        ).convert("RGB")
-        label = torch.from_numpy(self.label_list[idx])
-        return img, label, name
-
-    def __len__(self):
-        return len(self.img_name_list)
-
-
-class COCOClsDataset(Dataset):
-    def __init__(
-        self,
-        img_name_list_path="./data/coco/val_id.txt",
-        coco_root="./datasets/coco_stuff164k",
-        label_file_path="./data/coco/cls_labels.npy",
-    ):
-        self.img_name_list = load_img_name_list(img_name_list_path)
-        self.label_list = load_image_label_list_from_npy(
-            self.img_name_list, label_file_path
-        )
-        self.coco_root = coco_root
-        self.train = "train" in img_name_list_path
-
-    def __getitem__(self, idx):
-        name = self.img_name_list[idx]
-        if self.train:
-            img = Image.open(
-                os.path.join(self.coco_root, "images", "train2017", f"{name}.jpg")
-            ).convert("RGB")
+        self.name = config.dataset
+        self.data_root = config.data_root
+        self.img_name_list = load_img_name_list(config.data_name_list)
+        # checking use cls_predict.npy or cls_labels.npy
+        # see ./configs/io/io.yaml for details
+        if config.get("use_cls_predict", False):
+            label_file_path = os.path.join(config.output_path, "cls_predict.npy")
         else:
-            img = Image.open(
-                os.path.join(self.coco_root, "images", "val2017", f"{name}.jpg")
-            ).convert("RGB")
-        label = torch.from_numpy(self.label_list[idx])
-
-        return img, label, name
-
-    def __len__(self):
-        return len(self.img_name_list)
-
-
-class VOCSimDataset(Dataset):
-    def __init__(
-        self,
-        img_name_list_path="./data/voc_sim/val_id.txt",
-        voc_sim_root="./datasets/voc_sim",
-        label_file_path="./data/voc_sim/cls_labels.npy",
-    ):
-        self.img_name_list = load_img_name_list(img_name_list_path)
+            label_file_path = config.name_to_cls_labels
         self.label_list = load_image_label_list_from_npy(
             self.img_name_list, label_file_path
         )
-        self.voc_sim_root = voc_sim_root
+        self.img_path = config.img_path
+        self.gt_path = config.gt_path
+        self.category = config.category
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Tuple[str, str, str, torch.Tensor]:
         name = self.img_name_list[idx]
-        img = Image.open(
-            os.path.join(self.voc_sim_root, "images", f"{name}.png")
-        ).convert("RGB")
+        img_path = self.img_path.format(data_root=self.data_root, img_name=name)
+        gt_path = self.gt_path.format(data_root=self.data_root, img_name=name)
         label = torch.from_numpy(self.label_list[idx])
-        return img, label, name
+        return name, img_path, gt_path, label
 
     def __len__(self):
         return len(self.img_name_list)
-
-
-class COCOCapDataset(Dataset):
-    def __init__(
-        self,
-        img_name_list_path="./data/coco_cap/val_id.txt",
-        coco_cap_root="./datasets/coco_cap",
-        label_file_path="./data/coco_cap/cls_labels.npy",
-    ):
-        self.img_name_list = load_img_name_list(img_name_list_path)
-        self.label_list = load_image_label_list_from_npy(
-            self.img_name_list, label_file_path
-        )
-        self.coco_cap_root = coco_cap_root
-
-    def __getitem__(self, idx):
-        name = self.img_name_list[idx]
-        img = Image.open(
-            os.path.join(self.coco_cap_root, "images", f"{name}.png")
-        ).convert("RGB")
-        label = torch.from_numpy(self.label_list[idx])
-        return img, label, name
-
-    def __len__(self):
-        return len(self.img_name_list)
-
-
-def build_dataset(config: DictConfig) -> Dataset:
-    # checking use cls_predict.npy or cls_labels.npy
-    # see ./configs/io/io.yaml for details
-    if not config.use_cls_predict:
-        label_file_path = config.name_to_cls_labels
-    elif config.cls_predict == "":
-        label_file_path = os.path.join(config.output_path, "cls_predict.npy")
-    else:
-        label_file_path = config.cls_predict
-    if not os.path.exists(label_file_path):
-        sys.exit("label file not found")
-
-    # construct dataset
-    name_to_cls: Dict[str, Dataset] = {
-        "voc": VOC12Dataset,
-        "coco": COCOClsDataset,
-        "context": VOCContextDataset,
-        "voc_sim": VOCSimDataset,
-        "coco_cap": COCOCapDataset,
-    }
-    if config.dataset not in name_to_cls:
-        sys.exit("dataset not supported")
-    dataset_cls = name_to_cls[config.dataset]
-    return dataset_cls(config.data_name_list, config.data_root, label_file_path)

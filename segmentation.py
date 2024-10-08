@@ -27,7 +27,7 @@ from utils.attention_control import (
     register_attention_control,
 )
 from utils.check_cli_input import merge_cli_cfg
-from utils.datasets import build_dataset
+from utils.datasets import SegDataset
 from utils.img2text import Img2Text
 from utils.loss import CutLoss, DDSLoss
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         if os.path.exists(img_out_path):
             shutil.rmtree(img_out_path)
         os.makedirs(img_out_path, exist_ok=True)
-    dataset = build_dataset(config)
+    dataset = SegDataset(config)
     category = list(config.category.keys())
     if config.use_img2text:
         img2text = Img2Text(config)
@@ -164,7 +164,10 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (img, label, name) in enumerate(tqdm(dataset, desc="segmenting images...")):
+    for k, (name, img_path, gt_path, label) in enumerate(
+        tqdm(dataset, desc="segmenting images...")
+    ):
+        img = Image.open(img_path).convert("RGB")
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size

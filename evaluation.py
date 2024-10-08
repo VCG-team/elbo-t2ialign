@@ -10,11 +10,12 @@ from typing import Callable, Dict, List, Tuple
 import denseCRF
 import numpy as np
 from joblib import Parallel, delayed
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 from tqdm import tqdm
 
 from utils.check_cli_input import merge_cli_cfg
+from utils.datasets import SegDataset
 
 category = []
 num_cls = 0
@@ -51,9 +52,7 @@ def densecrf(I, P):
     return out
 
 
-def load_gt_and_predict(
-    predict_folder: str, data_root: str, gt_list: str
-) -> List[Tuple]:
+def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
     # convert img idx to the predicted cls names
     idx_to_cls = defaultdict(list)
     for predict_file in os.listdir(predict_folder):
@@ -61,31 +60,12 @@ def load_gt_and_predict(
         idx = int(predict_file.split("_")[0])
         cls = predict_file.split("_")[1].split(".")[0]
         idx_to_cls[idx].append(cls)
-
-    # ground truth filename list
-    df = open(gt_list, "r")
-    name_list = [name.strip() for name in df.readlines()]
-    df.close()
+    # load dataset
+    dataset = SegDataset(config)
 
     def process(idx):
         # 1. load ground truth
-        name = name_list[idx]
-        if config.dataset == "coco":
-            gt_path = os.path.join(
-                data_root, "annotations", "val2017", f"{name}_labelTrainIds.png"
-            )
-            img_path = os.path.join(data_root, "images", "val2017", f"{name}.jpg")
-        elif config.dataset == "voc":
-            gt_path = os.path.join(data_root, "SegmentationClassAug", f"{name}.png")
-            img_path = os.path.join(data_root, "JPEGImages", f"{name}.jpg")
-        elif config.dataset == "context":
-            gt_path = os.path.join(data_root, "SegmentationClassContext", f"{name}.png")
-            img_path = os.path.join(data_root, "JPEGImages", f"{name}.jpg")
-        elif config.dataset == "voc_sim" or config.dataset == "coco_cap":
-            gt_path = os.path.join(data_root, "annotations", f"{name}.png")
-            img_path = os.path.join(data_root, "images", f"{name}.png")
-        else:
-            sys.exit("unknown dataset")
+        _, img_path, gt_path, _ = dataset[idx]
         gt = np.array(Image.open(gt_path))
         # follow GroupViT (CVPR 2022), we only use first 80 classes in COCO, set other classes to background
         # related code: https://github.com/NVlabs/GroupViT/blob/main/convert_dataset/convert_coco_object.py
@@ -118,9 +98,9 @@ def load_gt_and_predict(
     # use joblib with tqdm to load gt and predict in parallel
     # see: https://stackoverflow.com/a/77948954/12389770
     results = Parallel(n_jobs=config.n_jobs, return_as="generator")(
-        delayed(process)(idx) for idx in range(len(name_list))
+        delayed(process)(idx) for idx in range(len(dataset))
     )
-    return list(tqdm(results, desc="loading gt and predict...", total=len(name_list)))
+    return list(tqdm(results, desc="loading gt and predict...", total=len(dataset)))
 
 
 def apply_threshold(
@@ -306,9 +286,7 @@ if __name__ == "__main__":
     category.insert(0, "background")
     num_cls = len(category)
 
-    gt_and_predict = load_gt_and_predict(
-        predict_dir, config.data_root, config.data_name_list
-    )
+    gt_and_predict = load_gt_and_predict(predict_dir, config)
 
     # binary search to find the best threshold for key metric
     threshold_bar = tqdm(desc="searching best threshold for key metric...")

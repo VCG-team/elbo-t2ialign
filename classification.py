@@ -8,12 +8,13 @@ import numpy as np
 import spacy
 import torch
 from omegaconf import OmegaConf
+from PIL import Image
 from sklearn.metrics import f1_score, precision_score, recall_score
 from tqdm import tqdm
 from transformers import CLIPImageProcessor, CLIPModel, CLIPTokenizer
 
 from utils.check_cli_input import merge_cli_cfg
-from utils.datasets import build_dataset
+from utils.datasets import SegDataset
 from utils.img2text import Img2Text
 
 if __name__ == "__main__":
@@ -70,7 +71,7 @@ if __name__ == "__main__":
     img2text = Img2Text(config)
 
     # load image dataset for classification
-    dataset = build_dataset(config)
+    dataset = SegDataset(config)
 
     # load labels and synonym for different dataset
     labels_synonym = config.category
@@ -111,8 +112,11 @@ if __name__ == "__main__":
 
     image_classification_bar = tqdm(dataset)
     image_classification_bar.set_description("image multi-label classification")
-    for data_idx, (image, label, name) in enumerate(image_classification_bar):
+    for data_idx, (name, img_path, gt_path, label) in enumerate(
+        image_classification_bar
+    ):
         label_predict = set()
+        image = Image.open(img_path).convert("RGB")
 
         # 1. generate text for all text prompts, and extract nouns and all words
         # TODO: cache

@@ -5,6 +5,8 @@ dataset: "coco_cap"
 data_root: "./datasets/coco_cap"
 data_name_list: "./data/coco_cap/val_id.txt"
 name_to_cls_labels: "./data/coco_cap/cls_labels.npy"
+img_path: "{data_root}/images/{img_name}.png"
+gt_path: "{data_root}/annotations/{img_name}.png"
 num_cls: 20 # not including background
 category:
   plane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
