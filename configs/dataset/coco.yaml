@@ -40,12 +40,12 @@ category:
       "people",
       "speaker",
     ]
-  bicycle: ["bicycle"]
+  bicycle: ["bicycle", "bike"]
   car: ["cab", "taxi", "van", "jeep", "cooper", "chrysler", "car", "suv"]
   motorbike: ["motorbike", "motorcycle", "moped", "scooter"]
   aeroplane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
   bus: ["bus", "tram"]
-  train: ["train"]
+  train: ["train", "high-speed train", "locomotive"]
   truck: ["truck", "van"]
   boat: ["ship", "kayak", "boat", "canoe", "sailboat"]
   traffic light: ["stoplight", "traffic light"]

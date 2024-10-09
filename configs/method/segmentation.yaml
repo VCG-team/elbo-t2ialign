@@ -1,7 +1,13 @@
 # segmentation process settings (segmentation.py)
-use_img2text: True
-source_template: "a photograph of {}" # source img prompt = prompt_template.format(source_class)
-target_template: "a photograph of {}" # target img prompt = prompt_template.format(special_token)
+source_text:
+  prompt: "a photograph of {source_cls}"
+  template: "a photograph of {source_cls} {source_gen} and {bg_text}"
+  compel_template: "a photograph of ({source_cls})++ {source_gen} and {bg_text}"
+target_text:
+  prompt: "a photograph of {source_cls}"
+  template: "a photograph of {target_cls} {source_gen} and {bg_text}"
+  compel_template: "a photograph of {target_cls} {source_gen} and {bg_text}"
+target_cls_strategy: "special_token" # "special_token" or "synonym"
 special_token: "''"
 # see ./configs/io/io.yaml for details
 # by io.yaml default, use_cls_prediction is False

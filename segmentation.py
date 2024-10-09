@@ -38,8 +38,9 @@ TS = Union[Tuple[T, ...], List[T]]
 
 @torch.inference_mode()
 def encode_prompt(pipe: AutoPipelineForText2Image, text: str) -> Tuple[T, TN]:
-    # use compel to do prompt weighting
+    # use compel to do prompt weighting, blend, conjunction, etc.
     # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
+    # compel usage: https://github.com/damian0815/compel/blob/main/doc/syntax.md
     if isinstance(pipe, StableDiffusionPipeline):
         compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
         return compel(text), None
@@ -118,9 +119,12 @@ if __name__ == "__main__":
             shutil.rmtree(img_out_path)
         os.makedirs(img_out_path, exist_ok=True)
     dataset = SegDataset(config)
+    img2text = Img2Text(config)
     category = list(config.category.keys())
-    if config.use_img2text:
-        img2text = Img2Text(config)
+    # refer to clip-es (CVPR 2023), we add background categories to the prompt
+    # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
+    # paper: https://arxiv.org/abs/2212.09506
+    bg_text = ",".join(config.bg_category)
 
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
@@ -176,52 +180,50 @@ if __name__ == "__main__":
 
         # generate mask for each label in the image
         for cls_idx in labels:
-            # 1. generate text prompts
-            cls_name = category[cls_idx]
-            text_source = config.source_template.format(cls_name)
-            text_target = config.target_template.format(config.special_token)
-            # miuns 2 to remove [START] and [END] tokens
-            cls_name_len = len(pipe.tokenizer.encode(cls_name)) - 2
-            # get the position of cls_name occurrence in the source prompt template
-            cls_name_start = config.source_template.split(" ").index("{}")
-            # pos for cls_name in text_source, add 1 for [START] token
-            pos = [1 + cls_name_start + i for i in range(cls_name_len)]
+            # 1. generate source text and target text
+            source_cls = category[cls_idx]
+            if config.target_cls_strategy == "special_token":
+                target_cls = config.special_token
+            elif config.target_cls_strategy == "synonym":
+                pass
+            slot = {
+                "source_cls": source_cls,
+                "target_cls": target_cls,
+                "bg_text": bg_text,
+            }
+            source_prompt = config.source_text.prompt.format(**slot)
+            target_prompt = config.target_text.prompt.format(**slot)
+            source_gen = img2text(img, name, source_prompt)
+            target_gen = img2text(img, name, target_prompt)
+            slot.update({"source_gen": source_gen, "target_gen": target_gen})
+            source_text = config.source_text.template.format(**slot)
+            target_text = config.target_text.template.format(**slot)
+            source_text_compel = config.source_text.compel_template.format(**slot)
+            target_text_compel = config.target_text.compel_template.format(**slot)
 
-            if config.use_img2text:
-                # use large multimodal model to convert img to text
-                out_text = img2text(img, name, text_source)
-                # update pos for cross attention extraction
-                next_word = out_text.split(" ")[0]
-                if next_word.endswith("ing"):
-                    pos.append(pos[-1] + 1)
-                # refer to clip-es (CVPR 2023), we add background categories to the prompt
-                # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
-                # paper: https://arxiv.org/abs/2212.09506
-                text_target = (
-                    text_target
-                    + " "
-                    + out_text
-                    + " and "
-                    + ",".join(config.bg_category)
-                )
-                text_source = (
-                    text_source
-                    + "++ "
-                    + out_text
-                    + " and "
-                    + ",".join(config.bg_category)
-                )
+            # 2. get the position of cls_name occurrence in the source text
+            souce_text_id = pipe.tokenizer.encode(source_text)
+            # remove [START] and [END] tokens
+            source_cls_id = pipe.tokenizer.encode(source_cls)[1:-1]
+            for start in range(len(souce_text_id) - len(source_cls_id) + 1):
+                if souce_text_id[start : start + len(source_cls_id)] == source_cls_id:
+                    pos = [start + i for i in range(len(source_cls_id))]
+                    break
+            if pos[-1] + 1 < len(souce_text_id) and pipe.tokenizer.decode(
+                souce_text_id[pos[-1] + 1]
+            ).endswith("ing"):
+                pos.append(pos[-1] + 1)
 
-            # 2. prepare image optimization input, loss, and optimizer
-            text_emb_source = encode_prompt(pipe, text_source)
-            text_emb_target = encode_prompt(pipe, text_target)
+            # 3. prepare image optimization input, loss, and optimizer
+            text_emb_source = encode_prompt(pipe, source_text_compel)
+            text_emb_target = encode_prompt(pipe, target_text_compel)
             z_target = z_source.clone()
             z_target.requires_grad = True
             dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
             cut_loss = CutLoss(config.n_patches, config.patch_size)
             optimizer = SGD(params=[z_target], lr=config.lr)
 
-            # 3. image optimization and attention maps collection
+            # 4. image optimization and attention maps collection
             time_to_eps = defaultdict(lambda: None)
             controller.reset()
             optimize_timesteps = [
@@ -316,20 +318,20 @@ if __name__ == "__main__":
                             guidance_scale,
                         )
 
-            # 4. refine attention map as mask
+            # 5. refine attention map as mask
             att_maps = controller.get_average_attention()
             mask = aggregate_cross_att(att_maps, pos, config)
             self_att = aggregate_self_att(att_maps, config)
             mask = torch.matmul(self_att, mask)
 
-            # 5. save mask and target img
+            # 6. save mask and target img
             max_res = round(sqrt(mask.shape[0]))
             mask = mask.view(1, 1, max_res, max_res)
             mask: T = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
-            imwrite(f"{mask_out_path}/{k}_{cls_name}.png", mask)
+            imwrite(f"{mask_out_path}/{k}_{category[cls_idx]}.png", mask)
             if config.save_img:
                 img = decode_latent(pipe, z_target)[0]
                 img = img.resize((w, h))
-                img.save(f"{img_out_path}/{k}_{cls_name}.png")
+                img.save(f"{img_out_path}/{k}_{category[cls_idx]}.png")
