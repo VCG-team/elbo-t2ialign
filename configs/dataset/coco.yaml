@@ -83,7 +83,7 @@ category:
   zebra: ["zebra"]
   giraffe: ["giraffe"]
   backpack: ["backpack"]
-  umbrella: ["umbrella"]
+  umbrella: ["umbrella", "bumbershoot"]
   handbag: ["handbag"]
   tie: ["tie"]
   suitcase: ["suitcase", "luggage"]

@@ -13,7 +13,7 @@ category:
   airplane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
   bag: ["bag"]
   bed: ["bed"]
-  bedclothes: ["bedclothes"]
+  bedclothes: ["bedclothes", "bedclothing"]
   bench: ["bench"]
   bicycle: ["bicycle"]
   bird:

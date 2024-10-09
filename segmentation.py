@@ -1,4 +1,5 @@
 import os
+import random
 import shutil
 import warnings
 from argparse import ArgumentParser
@@ -185,7 +186,7 @@ if __name__ == "__main__":
             if config.target_cls_strategy == "special_token":
                 target_cls = config.special_token
             elif config.target_cls_strategy == "synonym":
-                pass
+                target_cls = random.choice(config.category[source_cls])
             slot = {
                 "source_cls": source_cls,
                 "target_cls": target_cls,
