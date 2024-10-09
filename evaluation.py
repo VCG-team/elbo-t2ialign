@@ -332,9 +332,12 @@ if __name__ == "__main__":
     # 1. overall metrics with best threshold
     metrics = apply_metrics(l_info["statistics"], bucket_num=1)
     log.update({"overall": metrics})
-    # 2. background class metrics with best threshold
-    metrics = apply_metrics(l_info["statistics"], filter_fn=lambda x: x[5] == 0)
-    log.update({"background": metrics})
+    # 2. classes metrics with best threshold
+    for cls in category:
+        metrics = apply_metrics(
+            l_info["statistics"], filter_fn=lambda x: x[5] == category.index(cls)
+        )
+        log.update({cls: metrics})
     # 3. metrics of all foreground classes at the best threshold, sorted by the ratio of gt to img size, divide the data into blocks
     metrics = apply_metrics(
         l_info["statistics"],
@@ -343,15 +346,7 @@ if __name__ == "__main__":
         bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t_area)": metrics})
-    # 4. metrics of all foreground classes at the best threshold, sorted by the size of gt, divide the data into blocks
-    metrics = apply_metrics(
-        l_info["statistics"],
-        filter_fn=lambda x: x[5] != 0,
-        sort_fn=lambda x: int(x[1]),
-        bucket_num=config.bucket_num,
-    )
-    log.update({"foreground(sort by t)": metrics})
-    # 5. write metrics to json
+    # 4. write metrics to json
     metrics_output_path = os.path.join(config.output_path, "segmentation_metrics.json")
     with open(metrics_output_path, "w") as f:
         json.dump(log, f, indent=4)
@@ -364,9 +359,12 @@ if __name__ == "__main__":
     # 1. overall metrics with best threshold
     metrics = apply_metrics(instance_statistics, bucket_num=1)
     log.update({"overall": metrics})
-    # 2. background class metrics with best threshold
-    metrics = apply_metrics(instance_statistics, filter_fn=lambda x: x[5] == 0)
-    log.update({"background": metrics})
+    # 2. classes metrics with best threshold
+    for cls in category:
+        metrics = apply_metrics(
+            instance_statistics, filter_fn=lambda x: x[5] == category.index(cls)
+        )
+        log.update({cls: metrics})
     # 3. metrics of all foreground classes at the best threshold, sorted by the ratio of gt to img size, divide the data into blocks
     metrics = apply_metrics(
         instance_statistics,
@@ -375,15 +373,7 @@ if __name__ == "__main__":
         bucket_num=config.bucket_num,
     )
     log.update({"foreground(sort by t_area)": metrics})
-    # 4. metrics of all foreground classes at the best threshold, sorted by the size of gt, divide the data into blocks
-    metrics = apply_metrics(
-        instance_statistics,
-        filter_fn=lambda x: x[5] != 0,
-        sort_fn=lambda x: int(x[1]),
-        bucket_num=config.bucket_num,
-    )
-    log.update({"foreground(sort by t)": metrics})
-    # 5. write metrics to json
+    # 4. write metrics to json
     metrics_output_path = os.path.join(
         config.output_path, "segmentation_metrics_crf.json"
     )
