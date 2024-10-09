@@ -1,6 +1,7 @@
 # Modified from MCTFormer(CVPR 2022) https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py
 import json
 import os
+import shutil
 import sys
 import warnings
 from argparse import ArgumentParser
@@ -286,7 +287,10 @@ if __name__ == "__main__":
     if config.start >= config.end:
         sys.exit("start threshold should be less than end")
     if config.save_mask:
-        os.makedirs(os.path.join(config.output_path, "masks"), exist_ok=True)
+        mask_dir = os.path.join(config.output_path, "masks")
+        if os.path.exists(mask_dir):
+            shutil.rmtree(mask_dir)
+        os.makedirs(mask_dir, exist_ok=True)
     predict_dir = os.path.join(config.output_path, "heatmaps")
     category = list(config.category.keys())
     category.insert(0, "background")
