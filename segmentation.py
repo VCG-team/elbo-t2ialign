@@ -76,6 +76,16 @@ def decode_latent(pipe: AutoPipelineForText2Image, latent: T) -> Image:
     return pipe.image_processor.postprocess(img_tensor)
 
 
+def parse_timesteps(timesteps: List[List]) -> List:
+    parsed_timesteps = []
+    for t in timesteps:
+        if len(t) == 3:
+            parsed_timesteps.extend(range(t[0], t[1], t[2]))
+        else:  # len(t) == 4, random sample
+            parsed_timesteps.extend([random.randint(t[1], t[2]) for _ in range(t[3])])
+    return parsed_timesteps
+
+
 if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
@@ -227,12 +237,7 @@ if __name__ == "__main__":
             # 4. image optimization and attention maps collection
             time_to_eps = defaultdict(lambda: None)
             controller.reset()
-            optimize_timesteps = [
-                timestep
-                for start, end, step in config.optimize_timesteps
-                for timestep in range(start, end, step)
-            ]
-            for timestep in optimize_timesteps:
+            for timestep in parse_timesteps(config.optimize_timesteps):
                 with (
                     torch.enable_grad()
                     if config.loss_type == "cds"
@@ -295,12 +300,7 @@ if __name__ == "__main__":
                 optimizer.step()
             if config.delay_collection:
                 controller.reset()
-                collect_timesteps = [
-                    timestep
-                    for start, end, step in config.collect_timesteps
-                    for timestep in range(start, end, step)
-                ]
-                for timestep in collect_timesteps:
+                for timestep in parse_timesteps(config.collect_timesteps):
                     with torch.no_grad():
                         z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
                             z_source, time_to_eps[timestep], timestep

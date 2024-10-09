@@ -13,11 +13,16 @@ special_token: "''"
 # by io.yaml default, use_cls_prediction is False
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset
 use_cls_predict: True
-optimize_timesteps: # timesteps to optimize image, format: [start, end, step]
+# timesteps to optimize image
+# format: [start, end(exclude), step] or ["random", start, end(include), num]
+optimize_timesteps:
   - [1, 2, 1]
   - [25, 151, 25]
-delay_collection: False # whether to delay the collection of attention maps
-collect_timesteps: # timesteps to collect attention maps, only valid when delay_collection is True, format: [start, end, step]
+# whether to delay the collection of attention maps
+delay_collection: False
+# timesteps to collect attention maps, only valid when delay_collection is True
+# format: [start, end(exclude), step] or ["random", start, end(include), num]
+collect_timesteps:
   - [1, 2, 1]
   - [25, 151, 25]
 loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
