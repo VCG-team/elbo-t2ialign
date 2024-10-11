@@ -7,6 +7,7 @@ from collections import defaultdict
 from math import sqrt
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from compel import Compel, ReturnedEmbeddingsType
@@ -116,6 +117,8 @@ if __name__ == "__main__":
     os.makedirs(config.output_path, exist_ok=True)
     OmegaConf.save(config, os.path.join(config.output_path, "segmentation.yaml"))
 
+    random.seed(config.seed)
+    np.random.seed(config.seed)
     torch.manual_seed(config.seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
