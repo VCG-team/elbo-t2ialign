@@ -1,6 +1,6 @@
 #!/bin/bash
 # find least used gpu, min memory first, min utilization second
-# set device to "" to use all gpus
+# set device to "" to use all gpus, or set device to specific gpu indexes to use them, e.g. "0,1,2"
 device=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv | sed '1d' | sort -t ',' -k 2,2n -k 3,3n | head -n 1 | cut -d ',' -f 1)
 
 # get script name as output folder name(remove file extension)

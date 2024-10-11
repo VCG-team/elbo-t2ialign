@@ -331,7 +331,9 @@ if __name__ == "__main__":
             att_maps = controller.get_average_attention()
             mask = aggregate_cross_att(att_maps, pos, config)
             if config.save_cross_att:
-                cross_att: T = F.interpolate(mask, size=(h, w), mode="bilinear")
+                max_res = round(sqrt(mask.shape[0]))
+                cross_att = mask.view(1, 1, max_res, max_res)
+                cross_att: T = F.interpolate(cross_att, size=(h, w), mode="bilinear")
                 cross_att = (
                     (cross_att - cross_att.min())
                     / (cross_att.max() - cross_att.min())

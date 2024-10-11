@@ -6,6 +6,7 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.debugpy",
-        "redhat.vscode-yaml"
+        "redhat.vscode-yaml",
+        "ms-toolsai.datawrangler"
     ]
 }
