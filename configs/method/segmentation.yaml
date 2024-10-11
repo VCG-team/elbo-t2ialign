@@ -31,6 +31,7 @@ mask_threshold: 0.3 # mask threshold for loss calculation
 lr: 1.0e-1 # learning rate
 guidance_scale: null # null or float, if null, use the default value of pipeline
 save_img: False # whether to save optimized images(decoded z_target)
+save_cross_att: False # whether to save cross attention maps
 
 # attention control settings (attention_control.py)
 # diffusion models use unet/dit with cross/self attentions to predict noise

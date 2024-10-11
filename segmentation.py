@@ -132,6 +132,11 @@ if __name__ == "__main__":
         if os.path.exists(img_out_path):
             shutil.rmtree(img_out_path)
         os.makedirs(img_out_path, exist_ok=True)
+    if config.save_cross_att:
+        cross_att_out_path = os.path.join(config.output_path, "cross_att")
+        if os.path.exists(cross_att_out_path):
+            shutil.rmtree(cross_att_out_path)
+        os.makedirs(cross_att_out_path, exist_ok=True)
     dataset = SegDataset(config)
     img2text = Img2Text(config)
     category = list(config.category.keys())
@@ -322,13 +327,22 @@ if __name__ == "__main__":
                             guidance_scale,
                         )
 
-            # 5. refine attention map as mask
+            # 5. refine cross attention map and optionally save cross attention as mask
             att_maps = controller.get_average_attention()
             mask = aggregate_cross_att(att_maps, pos, config)
+            if config.save_cross_att:
+                cross_att: T = F.interpolate(mask, size=(h, w), mode="bilinear")
+                cross_att = (
+                    (cross_att - cross_att.min())
+                    / (cross_att.max() - cross_att.min())
+                    * 255
+                )
+                cross_att = cross_att.squeeze().cpu().numpy()
+                imwrite(f"{cross_att_out_path}/{k}_{category[cls_idx]}.png", cross_att)
             self_att = aggregate_self_att(att_maps, config)
             mask = torch.matmul(self_att, mask)
 
-            # 6. save mask and target img
+            # 6. save mask and optionally save target img
             max_res = round(sqrt(mask.shape[0]))
             mask = mask.view(1, 1, max_res, max_res)
             mask: T = F.interpolate(mask, size=(h, w), mode="bilinear")

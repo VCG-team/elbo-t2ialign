@@ -15,13 +15,15 @@ datasets=("voc_sim" "coco_cap" "voc" "context" "coco")
 # 3. "_10_car": small dataset(10 images) randomly selected from original dataset with car class
 dataset_suffix=""
 
-# when using small dataset, we recommend saving target images and generated masks to visualize editing results
+# when using small dataset, we recommend saving intermediate results for visualization
 if [ "${dataset_suffix}" = "" ]; then
     save_img=False
     save_mask=False
+    save_cross_att=False
 else
     save_img=True
     save_mask=True
+    save_cross_att=True
 fi
 # optionally using classification.py to get class labels
 use_cls_predict=False
@@ -37,6 +39,7 @@ EOS
 # diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0
 segmentation_args=$(cat << EOS
 save_img=${save_img}
+save_cross_att=${save_cross_att}
 use_cls_predict=${use_cls_predict}
 optimize_timesteps=[[200,0,-1]]
 delay_collection=True
