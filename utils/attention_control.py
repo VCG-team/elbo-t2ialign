@@ -156,7 +156,7 @@ def register_attention_control(
             out = to_out(out)
             # if loss_type == "cds", we need to save self attention output
             if config.loss_type == "cds" and place_in_unet == "up" and not is_cross:
-                self.self_out = out[2:].detach()
+                self.self_out = out[2:].clone()
             return out
 
         return forward

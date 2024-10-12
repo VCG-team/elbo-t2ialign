@@ -22,7 +22,8 @@
                 "use_cls_predict=False",
                 "delay_collection=False",
                 "target_factor=0.5",
-                "loss_type=cds"
+                "loss_type=cds",
+                "optimize_timesteps=[[200,0,-1]]"
             ]
         },
         {
