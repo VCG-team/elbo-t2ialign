@@ -110,10 +110,8 @@ if __name__ == "__main__":
         "except for the most prominent objects, there are",
     ]
 
-    image_classification_bar = tqdm(dataset)
-    image_classification_bar.set_description("image multi-label classification")
-    for data_idx, (name, img_path, gt_path, label) in enumerate(
-        image_classification_bar
+    for data_idx, (name, img_path, _, _) in enumerate(
+        tqdm(dataset, desc=f"image multi-label classification of {dataset.name}")
     ):
         label_predict = set()
         image = Image.open(img_path).convert("RGB")

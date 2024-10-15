@@ -187,8 +187,8 @@ if __name__ == "__main__":
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
-    for k, (name, img_path, gt_path, label) in enumerate(
-        tqdm(dataset, desc="segmenting images...")
+    for k, (name, img_path, _, label) in enumerate(
+        tqdm(dataset, desc=f"segmenting images of {dataset.name}...")
     ):
         img = Image.open(img_path).convert("RGB")
         # https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.size
@@ -234,8 +234,10 @@ if __name__ == "__main__":
                 pos.append(pos[-1] + 1)
 
             # 3. prepare image optimization input, loss, and optimizer
-            text_emb_source = encode_prompt(pipe, source_text_compel)
-            text_emb_target = encode_prompt(pipe, target_text_compel)
+            text_emb_source = encode_prompt(pipe, source_text)
+            text_emb_target = encode_prompt(pipe, target_text)
+            text_emb_source_compel = encode_prompt(pipe, source_text_compel)
+            text_emb_target_compel = encode_prompt(pipe, target_text_compel)
             z_target = z_source.clone()
             z_target.requires_grad = True
             dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
@@ -252,10 +254,10 @@ if __name__ == "__main__":
                     else torch.no_grad()
                 ):
                     z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                        z_source, None, timestep
+                        z_source, timestep, None
                     )
                     z_t_target, _, _, _, _ = dds_loss.noise_input(
-                        z_target, eps, timestep
+                        z_target, timestep, eps
                     )
                     time_to_eps[timestep] = eps
                     eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
@@ -311,17 +313,17 @@ if __name__ == "__main__":
                 for timestep in parse_timesteps(config.collect_timesteps):
                     with torch.no_grad():
                         z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                            z_source, time_to_eps[timestep], timestep
+                            z_source, timestep, time_to_eps[timestep]
                         )
                         z_t_target, _, _, _, _ = dds_loss.noise_input(
-                            z_target, eps, timestep
+                            z_target, timestep, eps
                         )
                         _, _ = dds_loss.get_eps_prediction(
                             z_t_source,
                             z_t_target,
                             t,
-                            text_emb_source,
-                            text_emb_target,
+                            text_emb_source_compel,
+                            text_emb_target_compel,
                             text_emb_negative,
                             add_time_ids,
                             guidance_scale,

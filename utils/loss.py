@@ -120,8 +120,6 @@ class DDSLoss:
         if DDSLoss.init_flag:
             return
         DDSLoss.init_flag = True
-        self.t_min = 50
-        self.t_max = 950
         self.alpha_exp = alpha_exp
         self.sigma_exp = sigma_exp
         self.dtype = pipe.dtype
@@ -134,20 +132,9 @@ class DDSLoss:
             p.requires_grad = False
         self.unet = pipe.unet
 
-    def noise_input(self, z: T, eps: TN = None, timestep: Optional[int] = None):
+    def noise_input(self, z: T, timestep: int, eps: TN = None):
         batch_size = z.shape[0]
-        if timestep is None:
-            t = torch.randint(
-                low=self.t_min,
-                high=min(self.t_max, 1000) - 1,  # avoid the highest timestep
-                size=(batch_size,),
-                device=z.device,
-                dtype=torch.long,
-            )
-        elif isinstance(timestep, int):
-            t = torch.full((batch_size,), timestep, device=z.device, dtype=torch.long)
-        else:
-            raise ValueError(f"Invalid timestep: {timestep}")
+        t = torch.full((batch_size,), timestep, device=z.device, dtype=torch.long)
         if eps is None:
             eps = torch.randn_like(z)
         alpha_t = self.alphas[t, None, None, None]

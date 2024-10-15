@@ -23,7 +23,9 @@
                 "delay_collection=False",
                 "target_factor=0.5",
                 "loss_type=cds",
-                "optimize_timesteps=[[200,0,-1]]"
+                "optimize_timesteps=[[200,0,-1]]",
+                "save_img=True",
+                "save_cross_att=True"
             ]
         },
         {
