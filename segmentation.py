@@ -245,7 +245,7 @@ if __name__ == "__main__":
             optimizer = SGD(params=[z_target], lr=config.lr)
 
             # 4. image optimization and attention maps collection
-            time_to_eps = defaultdict(lambda: None)
+            # image optimization
             controller.reset()
             for timestep in parse_timesteps(config.optimize_timesteps):
                 with (
@@ -259,7 +259,6 @@ if __name__ == "__main__":
                     z_t_target, _, _, _, _ = dds_loss.noise_input(
                         z_target, timestep, eps
                     )
-                    time_to_eps[timestep] = eps
                     eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
                         z_t_source,
                         z_t_target,
@@ -308,26 +307,26 @@ if __name__ == "__main__":
                     loss += config.cut_loss_weight * tmp_loss
                 loss.backward()
                 optimizer.step()
-            if config.delay_collection:
-                controller.reset()
-                for timestep in parse_timesteps(config.collect_timesteps):
-                    with torch.no_grad():
-                        z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                            z_source, timestep, time_to_eps[timestep]
-                        )
-                        z_t_target, _, _, _, _ = dds_loss.noise_input(
-                            z_target, timestep, eps
-                        )
-                        _, _ = dds_loss.get_eps_prediction(
-                            z_t_source,
-                            z_t_target,
-                            t,
-                            text_emb_source_compel,
-                            text_emb_target_compel,
-                            text_emb_negative,
-                            add_time_ids,
-                            guidance_scale,
-                        )
+            # collect attention maps
+            controller.reset()
+            for timestep in parse_timesteps(config.collect_timesteps):
+                with torch.no_grad():
+                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
+                        z_source, timestep, None
+                    )
+                    z_t_target, _, _, _, _ = dds_loss.noise_input(
+                        z_target, timestep, eps
+                    )
+                    _, _ = dds_loss.get_eps_prediction(
+                        z_t_source,
+                        z_t_target,
+                        t,
+                        text_emb_source_compel,
+                        text_emb_target_compel,
+                        text_emb_negative,
+                        add_time_ids,
+                        guidance_scale,
+                    )
 
             # 5. refine cross attention map and optionally save cross attention as mask
             att_maps = controller.get_average_attention()
