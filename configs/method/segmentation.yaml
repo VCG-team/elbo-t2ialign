@@ -12,7 +12,7 @@ special_token: "''"
 # see ./configs/io/io.yaml for details
 # by io.yaml default, use_cls_prediction is False
 # for open vocabulary segmentation, we need to use predicted classes to construct dataset
-use_cls_predict: True
+use_cls_predict: False
 # timesteps to optimize image, recommend using random timesteps as DDS(ICCV 2023)
 # format: [start, end(exclude), step] or ["random", start, end(include), num]
 optimize_timesteps:

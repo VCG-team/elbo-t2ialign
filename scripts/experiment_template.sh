@@ -48,7 +48,6 @@ diffusion.variant=stabilityai/sdxl-turbo
 cross_gaussian_var=3
 self_gaussian_var=[15,2]
 loss_type=cds
-enable_mask=True
 EOS
 )
 

@@ -16,14 +16,10 @@
             "name": "Python Debugger: segmentation.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/segmentation.py",
+            "program": "${workspaceFolder}/segmentation_.py",
             "console": "integratedTerminal",
             "args": [
-                "use_cls_predict=False",
-                "delay_collection=False",
-                "target_factor=0.5",
                 "loss_type=cds",
-                "optimize_timesteps=[[200,0,-1]]",
                 "save_img=True",
                 "save_cross_att=True"
             ]

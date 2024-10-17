@@ -4,7 +4,6 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from diffusers import AutoPipelineForText2Image
 
 T = torch.Tensor
 TN = Optional[T]
@@ -113,113 +112,26 @@ class DDSLoss:
 
     def __init__(
         self,
-        pipe: AutoPipelineForText2Image,
-        alpha_exp=0.0,
-        sigma_exp=0.0,
+        loss_type: str = "dds",
     ):
         if DDSLoss.init_flag:
             return
         DDSLoss.init_flag = True
-        self.alpha_exp = alpha_exp
-        self.sigma_exp = sigma_exp
-        self.dtype = pipe.dtype
-        with torch.inference_mode():
-            alphas = torch.sqrt(pipe.scheduler.alphas_cumprod)
-            sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod)
-        self.alphas = alphas.to(pipe.unet.device, dtype=pipe.dtype)
-        self.sigmas = sigmas.to(pipe.unet.device, dtype=pipe.dtype)
-        for p in pipe.unet.parameters():
-            p.requires_grad = False
-        self.unet = pipe.unet
-
-    def noise_input(self, z: T, timestep: int, eps: TN = None):
-        batch_size = z.shape[0]
-        t = torch.full((batch_size,), timestep, device=z.device, dtype=torch.long)
-        if eps is None:
-            eps = torch.randn_like(z)
-        alpha_t = self.alphas[t, None, None, None]
-        sigma_t = self.sigmas[t, None, None, None]
-        z_t = alpha_t * z + sigma_t * eps
-        return z_t, eps, t, alpha_t, sigma_t
-
-    def get_eps_prediction(
-        self,
-        z_t_source: T,
-        z_t_target: T,
-        timestep: T,
-        text_emb_source: Tuple[T, TN],
-        text_emb_target: Tuple[T, TN],
-        text_emb_negative: Tuple[T, TN],
-        add_time_ids: TN,
-        guidance_scale: float,
-    ):
-        # prepare inputs
-        cond_source, pooled_source = text_emb_source
-        cond_target, pooled_target = text_emb_target
-        cond_negative, pooled_negative = text_emb_negative
-        z_t = torch.cat([z_t_source, z_t_target] * 2)
-        timesteps = torch.cat([timestep] * 4)
-        cond = torch.cat(
-            [
-                cond_negative,
-                cond_negative,
-                cond_source,
-                cond_target,
-            ]
-        )
-        added_cond_kwargs = None
-        # for SDXL, added_cond_kwargs is required
-        if pooled_source is not None:
-            add_text_embeds = torch.cat(
-                [
-                    pooled_negative,
-                    pooled_negative,
-                    pooled_source,
-                    pooled_target,
-                ]
-            )
-            add_time_ids = torch.cat([add_time_ids] * 4)
-            added_cond_kwargs = {
-                "text_embeds": add_text_embeds,
-                "time_ids": add_time_ids,
-            }
-        # forward and do classifier free guidance
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            e_t = self.unet(
-                z_t,
-                timesteps,
-                encoder_hidden_states=cond,
-                added_cond_kwargs=added_cond_kwargs,
-            ).sample
-            e_t_uncond, e_t = e_t.chunk(2)
-            e_t = e_t_uncond + guidance_scale * (e_t - e_t_uncond)
-            assert torch.isfinite(e_t).all()
-        # return eps_pred_source and eps_pred_target
-        return e_t.chunk(2)
+        self.loss_type = loss_type
 
     def get_loss(
         self,
         z_target: T,
-        alpha_t: T,
-        sigma_t: T,
         eps_pred_source: T,
         eps_pred_target: T,
         eps: T,
-        loss_type: str,
-        mask: TN = None,
     ) -> TS:
-        grad_coef = (alpha_t**self.alpha_exp) * (sigma_t**self.sigma_exp)
-        if loss_type == "sds":
+        if self.loss_type == "sds":
             grad = eps_pred_target - eps
-        elif loss_type == "dds" or loss_type == "cds":
+        elif self.loss_type == "dds" or self.loss_type == "cds":
             grad = eps_pred_target - eps_pred_source
         else:
-            raise ValueError(f"Invalid loss type: {loss_type}")
-        grad = grad_coef * grad
+            raise ValueError(f"Invalid loss type: {self.loss_type}")
         loss = z_target * grad.clone().detach()
-        if mask is None:
-            loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
-        else:
-            loss *= mask
-            loss = loss.sum() / mask.sum()
+        loss = loss.sum() / (z_target.shape[2] * z_target.shape[3])
         return loss

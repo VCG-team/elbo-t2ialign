@@ -1,51 +1,24 @@
 import json
 import os
 import warnings
-from argparse import ArgumentParser
 from collections import defaultdict
 
 import numpy as np
 import spacy
 import torch
-from omegaconf import OmegaConf
 from PIL import Image
 from sklearn.metrics import f1_score, precision_score, recall_score
 from tqdm import tqdm
 from transformers import CLIPImageProcessor, CLIPModel, CLIPTokenizer
 
-from utils.check_cli_input import merge_cli_cfg
 from utils.datasets import SegDataset
 from utils.img2text import Img2Text
+from utils.parse_args import parse_args
 
 if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
-
-    # parse arguments for configuration files
-    parser = ArgumentParser()
-    parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
-    parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
-    parser.add_argument(
-        "--method-cfg", type=str, default="./configs/method/classification.yaml"
-    )
-    args, unknown = parser.parse_known_args()
-    dataset_cfg = OmegaConf.load(args.dataset_cfg)
-    io_cfg = OmegaConf.load(args.io_cfg)
-    method_cfg = OmegaConf.load(args.method_cfg)
-    # parse arguments for command line configuration
-    cli_args = []
-    for arg in unknown:
-        if "=" in arg:
-            cli_args.append(arg)
-        else:
-            cli_args[-1] += f" {arg}"
-    cli_cfg = OmegaConf.from_dotlist(cli_args)
-    # merge all configurations
-    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg)
-    config = merge_cli_cfg(config, cli_cfg)
-    config.output_path = config.output_path[config.dataset]
-    os.makedirs(config.output_path, exist_ok=True)
-    OmegaConf.save(config, os.path.join(config.output_path, "classification.yaml"))
+    config = parse_args("classification")
 
     # load model
     _ = torch.set_grad_enabled(False)

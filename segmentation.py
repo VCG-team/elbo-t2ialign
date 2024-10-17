@@ -2,79 +2,34 @@ import os
 import random
 import shutil
 import warnings
-from argparse import ArgumentParser
-from collections import defaultdict
 from math import sqrt
-from typing import List, Optional, Tuple, Union
+from typing import List
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from compel import Compel, ReturnedEmbeddingsType
 from cv2 import imwrite
-from diffusers import (
-    AutoPipelineForText2Image,
-    StableDiffusionPipeline,
-    StableDiffusionXLPipeline,
-)
-from omegaconf import OmegaConf
+from diffusers import AutoPipelineForText2Image
+from diffusers.models.attention_processor import Attention
 from PIL import Image
 from torch.optim.sgd import SGD
 from tqdm import tqdm
 
 from utils.attention_control import (
-    AttentionStore,
+    AttentionHook,
+    AttentionStoreHook,
+    AttnProcessor,
     aggregate_cross_att,
     aggregate_self_att,
-    register_attention_control,
 )
-from utils.check_cli_input import merge_cli_cfg
 from utils.datasets import SegDataset
+from utils.diffusion import Diffusion
 from utils.img2text import Img2Text
 from utils.loss import CutLoss, DDSLoss
+from utils.parse_args import parse_args
 
 T = torch.Tensor
-TN = Optional[T]
-TS = Union[Tuple[T, ...], List[T]]
-
-
-@torch.inference_mode()
-def encode_prompt(pipe: AutoPipelineForText2Image, text: str) -> Tuple[T, TN]:
-    # use compel to do prompt weighting, blend, conjunction, etc.
-    # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
-    # compel usage: https://github.com/damian0815/compel/blob/main/doc/syntax.md
-    if isinstance(pipe, StableDiffusionPipeline):
-        compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder)
-        return compel(text), None
-    elif isinstance(pipe, StableDiffusionXLPipeline):
-        compel = Compel(
-            tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
-            text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
-            returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
-            requires_pooled=[False, True],
-        )
-        return compel(text)
-    else:
-        raise ValueError(f"Invalid pipeline type: {type(pipe)}")
-
-
-@torch.inference_mode()
-def encode_vae_image(pipe: AutoPipelineForText2Image, image: Image):
-    vae = pipe.vae
-    size, scaling_factor = vae.config.sample_size, vae.config.scaling_factor
-    img_tensor = pipe.image_processor.preprocess(image, size, size)
-    img_tensor = img_tensor.to(vae.device, dtype=vae.dtype)
-    z_tensor = vae.encode(img_tensor)["latent_dist"].mean * scaling_factor
-    return z_tensor.to(pipe.unet.device, dtype=pipe.unet.dtype)
-
-
-@torch.inference_mode()
-def decode_latent(pipe: AutoPipelineForText2Image, latent: T) -> Image:
-    vae = pipe.vae
-    scaling_factor = vae.config.scaling_factor
-    latent = latent.to(vae.device, dtype=vae.dtype)
-    img_tensor = vae.decode(latent / scaling_factor, return_dict=False)[0]
-    return pipe.image_processor.postprocess(img_tensor)
+TL = List[T]
 
 
 def parse_timesteps(timesteps: List[List]) -> List:
@@ -87,35 +42,57 @@ def parse_timesteps(timesteps: List[List]) -> List:
     return parsed_timesteps
 
 
+class CutLossHook(AttentionHook):
+    def forward(self, attn: Attention, q: T, k: T, v: T, sim: T, out: T) -> T:
+        if not attn.is_cross_attention:
+            attn.self_out = out[2:]
+        return out
+
+
+class BlendAttentionStoreHook(AttentionStoreHook):
+    def __init__(self, pipe: AutoPipelineForText2Image, config):
+        super().__init__(pipe)
+        self.merge_type: str = config.merge_type
+        self.target_factor: float = config.target_factor
+
+    @torch.inference_mode
+    def forward(self, attn: Attention, q: T, k: T, v: T, sim: T, out: T) -> T:
+        """
+        assume [source, target] forms a batch
+        q: (b, h, i, d)
+        k, v: (b, h, j, d)
+        sim: (b, h, i, j)
+        out: (b, i, n)
+        """
+        if attn.is_cross_attention:
+            if self.merge_type == "latent":
+                source_q, target_q = q.chunk(2)
+                source_k = k[0:1]
+                mix_q = source_q + self.target_factor * (source_q - target_q)
+                sim_mix = torch.einsum("b h i d, b h j d -> b h i j", mix_q, source_k)
+                mix_att = (sim_mix * attn.scale).softmax(dim=-1, dtype=sim_mix.dtype)
+                self.step_store["cross_att"].append(mix_att.mean(1))
+            elif self.merge_type == "attention":
+                target_q = q[1:2]
+                source_k = k[0:1]
+                sim_target = torch.einsum(
+                    "b h i d, b h j d -> b h i j", target_q, source_k
+                )
+                sim_target = (sim_target * attn.scale).softmax(
+                    dim=-1, dtype=sim_target.dtype
+                )
+                sim_source = sim[0:1]
+                mix_att = sim_source + self.target_factor * (sim_source - sim_target)
+                self.step_store["cross_att"].append(mix_att.mean(1))
+        else:
+            self.step_store["self_att"].append(sim.mean(1)[0:1])
+        return out
+
+
 if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
-
-    # parse arguments for configuration files
-    parser = ArgumentParser()
-    parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
-    parser.add_argument("--io-cfg", type=str, default="./configs/io/io.yaml")
-    parser.add_argument(
-        "--method-cfg", type=str, default="./configs/method/segmentation.yaml"
-    )
-    args, unknown = parser.parse_known_args()
-    dataset_cfg = OmegaConf.load(args.dataset_cfg)
-    io_cfg = OmegaConf.load(args.io_cfg)
-    method_cfg = OmegaConf.load(args.method_cfg)
-    # parse arguments for command line configuration
-    cli_args = []
-    for arg in unknown:
-        if "=" in arg:
-            cli_args.append(arg)
-        else:
-            cli_args[-1] += f" {arg}"
-    cli_cfg = OmegaConf.from_dotlist(cli_args)
-    # merge all configurations
-    config = OmegaConf.merge(dataset_cfg, io_cfg, method_cfg)
-    config = merge_cli_cfg(config, cli_cfg)
-    config.output_path = config.output_path[config.dataset]
-    os.makedirs(config.output_path, exist_ok=True)
-    OmegaConf.save(config, os.path.join(config.output_path, "segmentation.yaml"))
+    config = parse_args("segmentation")
 
     random.seed(config.seed)
     np.random.seed(config.seed)
@@ -155,35 +132,11 @@ if __name__ == "__main__":
         cache_dir=config.model_dir,
         device_map=config.diffusion.device_map,
     )
-    pipe.image_processor.config.resample = "bilinear"
-    # The VAE is in float32 to avoid NaN losses
-    # see: https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image_sdxl.py#L712
-    pipe.vae = pipe.vae.to(torch.float32)
-    pipe.vae = torch.compile(pipe.vae, mode="reduce-overhead", fullgraph=True)
-    controller = AttentionStore()
-    register_attention_control(pipe, controller, config)
-
-    text_emb_negative = encode_prompt(pipe, "")
-    if config.guidance_scale is not None:
-        guidance_scale = config.guidance_scale
-    elif isinstance(pipe, StableDiffusionPipeline):
-        guidance_scale = 7.5
-    elif isinstance(pipe, StableDiffusionXLPipeline):
-        guidance_scale = 5.0
-    else:
-        raise ValueError("guidance_scale is not set")
-    # if the model is SDXL architecture, get add_time_ids
-    add_time_ids = None
-    if isinstance(pipe, StableDiffusionXLPipeline):
-        text_encoder_projection_dim = pipe.text_encoder_2.config.projection_dim
-        img_size = pipe.vae.config.sample_size
-        add_time_ids = pipe._get_add_time_ids(
-            (img_size, img_size),
-            (0, 0),
-            (img_size, img_size),
-            dtype=text_emb_negative[1].dtype,
-            text_encoder_projection_dim=text_encoder_projection_dim,
-        ).to(pipe.unet.device)
+    pipe.unet.set_attn_processor(AttnProcessor())
+    store_hook = BlendAttentionStoreHook(pipe, config)
+    loss_hook = CutLossHook(pipe)
+    diffusion = Diffusion(pipe)
+    text_emb_null = diffusion.encode_prompt("")
 
     # Modified from DiffSegmenter(https://arxiv.org/html/2309.02773v2) inference code
     # See: https://github.com/VCG-team/DiffSegmenter/blob/main/open_vocabulary/voc12/ptp_stable_best.py#L464
@@ -195,7 +148,7 @@ if __name__ == "__main__":
         # For PIL Image, size is a tuple (width, height)
         w, h = img.size
         labels = torch.where(label)[0].tolist()
-        z_source = encode_vae_image(pipe, img)
+        z_source = diffusion.encode_vae_image(img)
 
         # generate mask for each label in the image
         for cls_idx in labels:
@@ -234,72 +187,57 @@ if __name__ == "__main__":
                 pos.append(pos[-1] + 1)
 
             # 3. prepare image optimization input, loss, and optimizer
-            text_emb_source = encode_prompt(pipe, source_text)
-            text_emb_target = encode_prompt(pipe, target_text)
-            text_emb_source_compel = encode_prompt(pipe, source_text_compel)
-            text_emb_target_compel = encode_prompt(pipe, target_text_compel)
+            text_emb_source = diffusion.encode_prompt(source_text)
+            text_emb_target = diffusion.encode_prompt(target_text)
+            text_emb_source_compel = diffusion.encode_prompt(source_text_compel)
+            text_emb_target_compel = diffusion.encode_prompt(target_text_compel)
             z_target = z_source.clone()
             z_target.requires_grad = True
-            dds_loss = DDSLoss(pipe, config.alpha_exp, config.sigma_exp)
+            dds_loss = DDSLoss(config.loss_type)
             cut_loss = CutLoss(config.n_patches, config.patch_size)
             optimizer = SGD(params=[z_target], lr=config.lr)
 
             # 4. image optimization and attention maps collection
             # image optimization
-            controller.reset()
             for timestep in parse_timesteps(config.optimize_timesteps):
                 with (
                     torch.enable_grad()
                     if config.loss_type == "cds"
                     else torch.no_grad()
                 ):
-                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                        z_source, timestep, None
+                    z_t_source, t, eps = diffusion.noise_input(z_source, timestep, None)
+                    z_t_target, _, _ = diffusion.noise_input(z_target, timestep, eps)
+                    eps_source_null, eps_target_null, eps_source, eps_target = (
+                        diffusion.get_eps_prediction(
+                            [z_t_source, z_t_target] * 2,
+                            [t] * 4,
+                            [
+                                text_emb_null,
+                                text_emb_null,
+                                text_emb_source,
+                                text_emb_target,
+                            ],
+                        ).chunk(4)
                     )
-                    z_t_target, _, _, _, _ = dds_loss.noise_input(
-                        z_target, timestep, eps
+                    eps_pred_source = diffusion.classifier_free_guidance(
+                        eps_source_null, eps_source, config.guidance_scale
                     )
-                    eps_pred_source, eps_pred_target = dds_loss.get_eps_prediction(
-                        z_t_source,
-                        z_t_target,
-                        t,
-                        text_emb_source,
-                        text_emb_target,
-                        text_emb_negative,
-                        add_time_ids,
-                        guidance_scale,
+                    eps_pred_target = diffusion.classifier_free_guidance(
+                        eps_target_null, eps_target, config.guidance_scale
                     )
-                    mask = None
-                    if config.enable_mask:
-                        att_maps = controller.get_average_attention()
-                        mask = aggregate_cross_att(att_maps, pos, config)
-                        self_att = aggregate_self_att(att_maps, config)
-                        mask = torch.matmul(self_att, mask)
-                        max_res = round(sqrt(mask.shape[0]))
-                        mask = mask.view(1, 1, max_res, max_res)
-                        mask = F.interpolate(
-                            mask, size=z_target.shape[2:], mode="bilinear"
-                        )
-                        mask = (mask - mask.min()) / (mask.max() - mask.min())
-                        mask[mask >= config.mask_threshold] = 1.0
-                        mask[mask < config.mask_threshold] = 0.0
                 optimizer.zero_grad()
                 tmp_loss = dds_loss.get_loss(
                     z_target,
-                    alpha_t,
-                    sigma_t,
                     eps_pred_source,
                     eps_pred_target,
                     eps,
-                    config.loss_type,
-                    mask,
                 )
                 loss = config.dds_loss_weight * tmp_loss
                 if config.loss_type == "cds":
                     tmp_loss = 0
                     for name, module in pipe.unet.named_modules():
                         if type(module).__name__ == "Attention":
-                            if hasattr(module, "self_out"):
+                            if "attn1" in name and "up" in name:
                                 out = module.self_out
                                 tmp_loss += cut_loss.get_attn_cut_loss(
                                     out[0:1], out[1:]
@@ -308,33 +246,24 @@ if __name__ == "__main__":
                 loss.backward()
                 optimizer.step()
             # collect attention maps
-            controller.reset()
+            store_hook.reset()
             for timestep in parse_timesteps(config.collect_timesteps):
                 with torch.no_grad():
-                    z_t_source, eps, t, alpha_t, sigma_t = dds_loss.noise_input(
-                        z_source, timestep, None
-                    )
-                    z_t_target, _, _, _, _ = dds_loss.noise_input(
-                        z_target, timestep, eps
-                    )
-                    _, _ = dds_loss.get_eps_prediction(
-                        z_t_source,
-                        z_t_target,
-                        t,
-                        text_emb_source_compel,
-                        text_emb_target_compel,
-                        text_emb_negative,
-                        add_time_ids,
-                        guidance_scale,
+                    z_t_source, t, eps = diffusion.noise_input(z_source, timestep, None)
+                    z_t_target, _, _ = diffusion.noise_input(z_target, timestep, eps)
+                    _ = diffusion.get_eps_prediction(
+                        [z_t_source, z_t_target],
+                        [t] * 2,
+                        [text_emb_source_compel, text_emb_target_compel],
+                        {"attention_hooks": [store_hook]},
                     )
 
             # 5. refine cross attention map and optionally save cross attention as mask
-            att_maps = controller.get_average_attention()
-            mask = aggregate_cross_att(att_maps, pos, config)
+            mask = aggregate_cross_att(store_hook, 0, pos, config)
             if config.save_cross_att:
                 max_res = round(sqrt(mask.shape[0]))
                 cross_att = mask.view(1, 1, max_res, max_res)
-                cross_att: T = F.interpolate(cross_att, size=(h, w), mode="bilinear")
+                cross_att = F.interpolate(cross_att, size=(h, w), mode="bilinear")
                 cross_att = (
                     (cross_att - cross_att.min())
                     / (cross_att.max() - cross_att.min())
@@ -342,17 +271,17 @@ if __name__ == "__main__":
                 )
                 cross_att = cross_att.squeeze().cpu().numpy()
                 imwrite(f"{cross_att_out_path}/{k}_{category[cls_idx]}.png", cross_att)
-            self_att = aggregate_self_att(att_maps, config)
+            self_att = aggregate_self_att(store_hook, 0, config)
             mask = torch.matmul(self_att, mask)
 
             # 6. save mask and optionally save target img
             max_res = round(sqrt(mask.shape[0]))
             mask = mask.view(1, 1, max_res, max_res)
-            mask: T = F.interpolate(mask, size=(h, w), mode="bilinear")
+            mask = F.interpolate(mask, size=(h, w), mode="bilinear")
             mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
             mask = mask.squeeze().cpu().numpy()
             imwrite(f"{mask_out_path}/{k}_{category[cls_idx]}.png", mask)
             if config.save_img:
-                img = decode_latent(pipe, z_target)[0]
+                img = diffusion.decode_latent(z_target)[0]
                 img = img.resize((w, h))
                 img.save(f"{img_out_path}/{k}_{category[cls_idx]}.png")
