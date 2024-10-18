@@ -17,13 +17,13 @@ use_cls_predict: False
 # format: [start, end(exclude), step] or ["random", start, end(include), num]
 optimize_timesteps:
   - ["random", 50, 949, 7]
+# whether to use ddim inversion to optimize image
+ddim_inversion: False
 # timesteps to collect attention maps, default to align with ddim inversion default step
 # format: [start, end(exclude), step] or ["random", start, end(include), num]
 collect_timesteps:
   - [20, 201, 20]
 loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
-enable_mask: False # whether enable mask for loss calculation
-mask_threshold: 0.3 # mask threshold for loss calculation
 lr: 1.0e-1 # learning rate
 guidance_scale: null # null or float, if null, use the default value of pipeline
 save_img: False # whether to save optimized images(decoded z_target)

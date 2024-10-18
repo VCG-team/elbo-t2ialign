@@ -132,6 +132,7 @@ if __name__ == "__main__":
         cache_dir=config.model_dir,
         device_map=config.diffusion.device_map,
     )
+    # register attention processor for attention hooks
     pipe.unet.set_attn_processor(AttnProcessor())
     store_hook = BlendAttentionStoreHook(pipe, config)
     loss_hook = CutLossHook(pipe)
@@ -205,12 +206,12 @@ if __name__ == "__main__":
                     if config.loss_type == "cds"
                     else torch.no_grad()
                 ):
-                    z_t_source, t, eps = diffusion.noise_input(z_source, timestep, None)
-                    z_t_target, _, _ = diffusion.noise_input(z_target, timestep, eps)
+                    z_t_source, eps = diffusion.noise_input(z_source, timestep, None)
+                    z_t_target, _ = diffusion.noise_input(z_target, timestep, eps)
                     eps_source_null, eps_target_null, eps_source, eps_target = (
                         diffusion.get_eps_prediction(
                             [z_t_source, z_t_target] * 2,
-                            [t] * 4,
+                            [timestep] * 4,
                             [
                                 text_emb_null,
                                 text_emb_null,
@@ -246,14 +247,21 @@ if __name__ == "__main__":
                 loss.backward()
                 optimizer.step()
             # collect attention maps
+            if config.ddim_inversion:
+                inverted_zs = diffusion.ddim_inversion(
+                    z_source, parse_timesteps(config.collect_timesteps), text_emb_source
+                )
             store_hook.reset()
-            for timestep in parse_timesteps(config.collect_timesteps):
+            for idx, timestep in enumerate(parse_timesteps(config.collect_timesteps)):
                 with torch.no_grad():
-                    z_t_source, t, eps = diffusion.noise_input(z_source, timestep, None)
-                    z_t_target, _, _ = diffusion.noise_input(z_target, timestep, eps)
+                    z_t_target, eps = diffusion.noise_input(z_target, timestep, None)
+                    if config.ddim_inversion:
+                        z_t_source = inverted_zs[idx]
+                    else:
+                        z_t_source, _ = diffusion.noise_input(z_source, timestep, eps)
                     _ = diffusion.get_eps_prediction(
                         [z_t_source, z_t_target],
-                        [t] * 2,
+                        [timestep] * 2,
                         [text_emb_source_compel, text_emb_target_compel],
                         {"attention_hooks": [store_hook]},
                     )

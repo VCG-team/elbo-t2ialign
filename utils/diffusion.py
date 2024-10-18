@@ -4,6 +4,7 @@ import torch
 from compel import Compel, ReturnedEmbeddingsType
 from diffusers import (
     AutoPipelineForText2Image,
+    DDIMScheduler,
     StableDiffusionPipeline,
     StableDiffusionXLPipeline,
 )
@@ -56,6 +57,7 @@ class Diffusion:
         else:
             raise ValueError(f"Invalid pipeline type: {type(pipe)}")
         self.image_processor = pipe.image_processor
+        self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
 
     @torch.inference_mode()
     def encode_prompt(self, text: str) -> T | Tuple[T, T]:
@@ -84,29 +86,29 @@ class Diffusion:
         )[0]
         return self.image_processor.postprocess(img_tensor)
 
-    def noise_input(self, z: T, timestep: int, eps: TN = None) -> Tuple[T, T, T]:
+    def noise_input(self, z_0: T, timestep: int, eps: TN = None) -> Tuple[T, T]:
         """
-        returns the noisy input tensor, timestep tensor, and noise tensor
+        returns the noised input z_t and the noise eps
         """
-        batch_size = z.shape[0]
-        t = torch.full((batch_size,), timestep, device=z.device, dtype=torch.long)
+        batch_size = z_0.shape[0]
+        t = torch.full((batch_size,), timestep, device=z_0.device, dtype=torch.long)
         if eps is None:
-            eps = torch.randn_like(z)
+            eps = torch.randn_like(z_0)
         alpha_t = self.alphas[t, None, None, None]
         sigma_t = self.sigmas[t, None, None, None]
-        z_t = alpha_t * z + sigma_t * eps
-        return z_t, t, eps
+        z_t = alpha_t * z_0 + sigma_t * eps
+        return z_t, eps
 
     def get_eps_prediction(
         self,
         z_t: List[T],
-        timestep: List[T],
+        timestep: List[int],
         text_emb: List[T] | List[Tuple[T, T]],
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
     ) -> T:
         batch_size = len(z_t)
         z_t = torch.cat(z_t)
-        timestep = torch.cat(timestep)
+        timestep = torch.tensor(timestep, device=z_t.device, dtype=torch.long)
         added_cond_kwargs = None
         if isinstance(self.pipe, StableDiffusionXLPipeline):
             cond = torch.cat([emb[0] for emb in text_emb])
@@ -130,11 +132,11 @@ class Diffusion:
         return e_t
 
     def classifier_free_guidance(
-        self, eps_uncond: T, eps_text: T, guidance_scale: Optional[float] = None
+        self, eps_uncond: T, eps_cond: T, guidance_scale: Optional[float] = None
     ) -> T:
         if guidance_scale is None:
             guidance_scale = self.guidance_scale
-        return eps_uncond + guidance_scale * (eps_text - eps_uncond)
+        return eps_uncond + guidance_scale * (eps_cond - eps_uncond)
 
     def step(
         self,
@@ -143,4 +145,35 @@ class Diffusion:
         next_t: int,
         eps_pred: T,
     ) -> T:
-        pass
+        """
+        deterministic DDIM sampling, also can be used for DDIM inversion, return next_z_t
+        paper: Null-text Inversion(CVPR 2023) https://ieeexplore.ieee.org/document/10205188
+        code from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+        """
+        alpha_prod_t = self.scheduler.alphas_cumprod[cur_t]
+        alpha_prod_t_next = self.scheduler.alphas_cumprod[next_t]
+        beta_prod_t = 1 - alpha_prod_t
+        next_original_sample = (
+            cur_z_t - beta_prod_t**0.5 * eps_pred
+        ) / alpha_prod_t**0.5
+        next_sample_direction = (1 - alpha_prod_t_next) ** 0.5 * eps_pred
+        next_sample = (
+            alpha_prod_t_next**0.5 * next_original_sample + next_sample_direction
+        )
+        return next_sample
+
+    @torch.inference_mode
+    def ddim_inversion(self, z_0: T, timesteps: List[int], cond_emb: T) -> List[T]:
+        """
+        denote timesteps as [t1, t2, ..., tn], invert z_0 to z_t1, z_t2, ..., z_tn sequentially
+        return: [z_t1, z_t2, ..., z_tn]
+        code from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+        """
+        z_ts = []
+        cur_t, cur_z = 0, z_0.clone().detach()
+        for t in timesteps:
+            eps_pred = self.get_eps_prediction([cur_z], [t], [cond_emb])
+            cur_z = self.step(cur_z, cur_t, t, eps_pred)
+            cur_t = t
+            z_ts.append(cur_z)
+        return z_ts
