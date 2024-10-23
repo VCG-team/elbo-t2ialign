@@ -6,7 +6,7 @@ channels:
 dependencies:
   - python=3.11.9
   - pip=24.2
-  - pytorch=2.4.1
+  - pytorch=2.5.0
   - pip:
       - compel==2.0.2
       - diffusers==0.30.3
@@ -27,3 +27,4 @@ dependencies:
       - pandas==2.2.3
       - itables==2.2.2
       - matplotlib==3.9.2
+      - torchvision==0.20.0
