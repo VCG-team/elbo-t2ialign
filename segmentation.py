@@ -117,6 +117,8 @@ if __name__ == "__main__":
     dataset = SegDataset(config)
     img2text = Img2Text(config)
     category = list(config.category.keys())
+    optimize_timesteps = parse_timesteps(config.optimize_timesteps)
+    collect_timesteps = parse_timesteps(config.collect_timesteps)
     # refer to clip-es (CVPR 2023), we add background categories to the prompt
     # related code: https://github.com/linyq2117/CLIP-ES/blob/main/clip_text.py
     # paper: https://arxiv.org/abs/2212.09506
@@ -150,6 +152,10 @@ if __name__ == "__main__":
         w, h = img.size
         labels = torch.where(label)[0].tolist()
         z_source = diffusion.encode_vae_image(img)
+        # use same noise for all classes at the same timestep
+        collect_noise = torch.randn(
+            len(collect_timesteps), *z_source.shape[1:], device=z_source.device
+        )
 
         # generate mask for each label in the image
         for cls_idx in labels:
@@ -198,9 +204,8 @@ if __name__ == "__main__":
             cut_loss = CutLoss(config.n_patches, config.patch_size)
             optimizer = SGD(params=[z_target], lr=config.lr)
 
-            # 4. image optimization and attention maps collection
-            # image optimization
-            for timestep in parse_timesteps(config.optimize_timesteps):
+            # 4. image optimization
+            for timestep in optimize_timesteps:
                 with (
                     torch.enable_grad()
                     if config.loss_type == "cds"
@@ -246,15 +251,18 @@ if __name__ == "__main__":
                     loss += config.cut_loss_weight * tmp_loss
                 loss.backward()
                 optimizer.step()
-            # collect attention maps
+
+            # 5. collect attention maps
             if config.ddim_inversion:
                 inverted_zs = diffusion.ddim_inversion(
-                    z_source, parse_timesteps(config.collect_timesteps), text_emb_source
+                    z_source, collect_timesteps, text_emb_source
                 )
             store_hook.reset()
-            for idx, timestep in enumerate(parse_timesteps(config.collect_timesteps)):
+            for idx, timestep in enumerate(collect_timesteps):
                 with torch.no_grad():
-                    z_t_target, eps = diffusion.noise_input(z_target, timestep, None)
+                    z_t_target, eps = diffusion.noise_input(
+                        z_target, timestep, collect_noise[idx]
+                    )
                     if config.ddim_inversion:
                         z_t_source = inverted_zs[idx]
                     else:
@@ -266,7 +274,7 @@ if __name__ == "__main__":
                         {"attention_hooks": [store_hook]},
                     )
 
-            # 5. refine cross attention map and optionally save cross attention as mask
+            # 6. refine cross attention map and optionally save cross attention as mask
             mask = aggregate_cross_att(store_hook, 0, pos, config)
             if config.save_cross_att:
                 max_res = round(sqrt(mask.shape[0]))
@@ -282,7 +290,7 @@ if __name__ == "__main__":
             self_att = aggregate_self_att(store_hook, 0, config)
             mask = torch.matmul(self_att, mask)
 
-            # 6. save mask and optionally save target img
+            # 7. save mask and optionally save target img
             max_res = round(sqrt(mask.shape[0]))
             mask = mask.view(1, 1, max_res, max_res)
             mask = F.interpolate(mask, size=(h, w), mode="bilinear")
