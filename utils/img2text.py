@@ -45,8 +45,9 @@ class Img2Text:
 
     def __call__(self, img: Image, img_name: str, prompt: str) -> str:  # todo space
         clean_prompt = re.sub(r"\s+", " ", prompt.strip())
-        hash_prompt = hashlib.md5(clean_prompt.encode()).hexdigest()
-        key = f"{img_name}--{hash_prompt}"
+        hash_prompt = hashlib.md5(clean_prompt.encode()).hexdigest()[0:16]
+        img_hash = hashlib.md5(img.tobytes()).hexdigest()[0:16]
+        key = f"{img_name}&{hash_prompt}&{img_hash}"
         if key in self.cache:
             return self.cache[key]
         if self.is_local:

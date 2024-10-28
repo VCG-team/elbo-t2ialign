@@ -18,7 +18,7 @@ def check_key(cfg_dict: dict, cli_cfg_dict: dict, prefix=""):
             )
 
 
-def parse_args(method: str):
+def parse_args(method: str, save_config: bool = True, args=None):
     # parse arguments for configuration files
     parser = ArgumentParser()
     parser.add_argument("--dataset-cfg", type=str, default="./configs/dataset/voc.yaml")
@@ -26,10 +26,10 @@ def parse_args(method: str):
     parser.add_argument(
         "--method-cfg", type=str, default=f"./configs/method/{method}.yaml"
     )
-    args, unknown = parser.parse_known_args()
-    dataset_cfg = OmegaConf.load(args.dataset_cfg)
-    io_cfg = OmegaConf.load(args.io_cfg)
-    method_cfg = OmegaConf.load(args.method_cfg)
+    known_args, unknown = parser.parse_known_args(args=args)
+    dataset_cfg = OmegaConf.load(known_args.dataset_cfg)
+    io_cfg = OmegaConf.load(known_args.io_cfg)
+    method_cfg = OmegaConf.load(known_args.method_cfg)
 
     # parse arguments for command line configuration
     cli_args = []
@@ -45,7 +45,10 @@ def parse_args(method: str):
     check_key(OmegaConf.to_object(config), OmegaConf.to_object(cli_cfg))
     config = OmegaConf.merge(config, cli_cfg)
     config.output_path = config.output_path[config.dataset]
-    os.makedirs(config.output_path, exist_ok=True)
-    OmegaConf.save(config, os.path.join(config.output_path, f"{method}.yaml"))
+
+    # save configuration
+    if save_config:
+        os.makedirs(config.output_path, exist_ok=True)
+        OmegaConf.save(config, os.path.join(config.output_path, f"{method}.yaml"))
 
     return config

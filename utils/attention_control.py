@@ -111,6 +111,12 @@ class AttentionStoreHook(AttentionHook):
 
     @torch.inference_mode
     def forward(self, attn: Attention, q: T, k: T, v: T, sim: T, out: T) -> T:
+        """
+        q: (b, h, i, d)
+        k, v: (b, h, j, d)
+        sim: (b, h, i, j)
+        out: (b, i, n)
+        """
         key = "cross_att" if attn.is_cross_attention else "self_att"
         self.step_store[key].append(sim)
         return out

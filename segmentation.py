@@ -181,15 +181,15 @@ if __name__ == "__main__":
             target_text_compel = config.target_text.compel_template.format(**slot)
 
             # 2. get the position of cls_name occurrence in the source text
-            souce_text_id = pipe.tokenizer.encode(source_text)
+            source_text_id = pipe.tokenizer.encode(source_text)
             # remove [START] and [END] tokens
             source_cls_id = pipe.tokenizer.encode(source_cls)[1:-1]
-            for start in range(len(souce_text_id) - len(source_cls_id) + 1):
-                if souce_text_id[start : start + len(source_cls_id)] == source_cls_id:
+            for start in range(len(source_text_id) - len(source_cls_id) + 1):
+                if source_text_id[start : start + len(source_cls_id)] == source_cls_id:
                     pos = [start + i for i in range(len(source_cls_id))]
                     break
-            if pos[-1] + 1 < len(souce_text_id) and pipe.tokenizer.decode(
-                souce_text_id[pos[-1] + 1]
+            if pos[-1] + 1 < len(source_text_id) and pipe.tokenizer.decode(
+                source_text_id[pos[-1] + 1]
             ).endswith("ing"):
                 pos.append(pos[-1] + 1)
 
