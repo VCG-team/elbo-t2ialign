@@ -70,7 +70,7 @@ category:
   plant: ["potted plant", "pottedplant", "plant", "flower"]
   sheep: ["lamb", "goat", "sheep"]
   sofa: ["couch", "sofa"]
-  train: ["train", "high-speed train", "locomotive"]
+  train: ["train", "high-speed train", "locomotive", "tram"]
   monitor: ["television", "tvmonitor", "screen", "tv", "monitor"]
 bg_category:
   [

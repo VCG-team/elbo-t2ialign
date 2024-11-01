@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from compel import Compel, ReturnedEmbeddingsType
 from diffusers import (
     AutoPipelineForText2Image,
@@ -134,6 +135,10 @@ class Diffusion:
     def classifier_free_guidance(
         self, eps_uncond: T, eps_cond: T, guidance_scale: Optional[float] = None
     ) -> T:
+        """
+        do classifier free guidance
+        paper: Classifier-Free Diffusion Guidance https://openreview.net/pdf?id=qw8AKxfYbI
+        """
         if guidance_scale is None:
             guidance_scale = self.guidance_scale
         return eps_uncond + guidance_scale * (eps_cond - eps_uncond)
@@ -177,3 +182,27 @@ class Diffusion:
             cur_t = t
             z_ts.append(cur_z)
         return z_ts
+
+    def get_elbo(
+        self,
+        z: T,
+        text_emb: T,
+        timestep: int,
+        eps: TN = None,
+        cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> T:
+        """
+        Args:
+            z: vae latent of an image
+            text_emb: text embedding used as condition
+            timestep: timestep to add noise
+            eps: noise
+        Returns:
+            elbo: evidence lower bound (diffusion loss)
+        """
+        z_t, eps = self.noise_input(z, timestep, eps)
+        eps_pred = self.get_eps_prediction(
+            [z_t], [timestep], [text_emb], cross_attention_kwargs
+        )
+        elbo = F.mse_loss(eps, eps_pred, reduction="mean")
+        return elbo

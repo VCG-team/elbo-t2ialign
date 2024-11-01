@@ -13,5 +13,3 @@ output
 
 # tmp folder/file
 tmp
-test*
-*.sh

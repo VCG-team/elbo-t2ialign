@@ -9,7 +9,7 @@ dependencies:
   - pytorch=2.5.0
   - pip:
       - compel==2.0.2
-      - diffusers==0.30.3
+      - diffusers==0.31.0
       - einops==0.8.0
       - numpy==2.0.2
       - omegaconf==2.3.0

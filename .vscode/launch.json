@@ -13,15 +13,27 @@
             "args": []
         },
         {
-            "name": "Python Debugger: segmentation.py",
+            "name": "Python Debugger: segmentation_with_dds.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/segmentation_.py",
+            "program": "${workspaceFolder}/segmentation_with_dds.py",
             "console": "integratedTerminal",
             "args": [
                 "loss_type=cds",
                 "save_img=True",
                 "save_cross_att=True"
+            ]
+        },
+        {
+            "name": "Python Debugger: segmentation_with_elbo.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/segmentation_with_elbo.py",
+            "console": "integratedTerminal",
+            "args": [
+                "save_img=True",
+                "save_cross_att=True",
+                "elbo_strength=5"
             ]
         },
         {
