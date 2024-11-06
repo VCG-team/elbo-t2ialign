@@ -6,6 +6,7 @@ from compel import Compel, ReturnedEmbeddingsType
 from diffusers import (
     AutoPipelineForText2Image,
     DDIMScheduler,
+    StableDiffusion3Pipeline,
     StableDiffusionPipeline,
     StableDiffusionXLPipeline,
 )
@@ -20,27 +21,37 @@ TS = Union[Tuple[T, ...], List[T]]
 
 class Diffusion:
     def __init__(self, pipe: AutoPipelineForText2Image):
-        for p in pipe.unet.parameters():
-            p.requires_grad = False
-        pipe.image_processor.config.resample = "bilinear"
+        # pipeline
+        self.pipe = pipe
         # The VAE is always in float32 to avoid NaN losses
         # see: https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image_sdxl.py#L712
         pipe.vae = pipe.vae.to(torch.float32)
         pipe.vae = torch.compile(pipe.vae, mode="reduce-overhead", fullgraph=True)
+        self.vae = pipe.vae
+        # image processor
+        pipe.image_processor.config.resample = "bilinear"
+        self.image_processor = pipe.image_processor
+        # alphas and sigmas
         with torch.inference_mode():
             alphas = torch.sqrt(pipe.scheduler.alphas_cumprod)
             sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod)
-        self.pipe = pipe
-        self.vae = pipe.vae
-        self.unet: UNet2DConditionModel | SD3Transformer2DModel = pipe.unet
         self.alphas = alphas.to(pipe.unet.device, dtype=pipe.unet.dtype)
         self.sigmas = sigmas.to(pipe.unet.device, dtype=pipe.unet.dtype)
+        # scheduler
+        self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
+        # custom components for different pipelines
         if isinstance(pipe, StableDiffusionPipeline):
+            for p in pipe.unet.parameters():
+                p.requires_grad = False
+            self.unet: UNet2DConditionModel = pipe.unet
             self.compel = Compel(
                 tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder
             )
             self.guidance_scale = 7.5
         elif isinstance(pipe, StableDiffusionXLPipeline):
+            for p in pipe.unet.parameters():
+                p.requires_grad = False
+            self.unet: UNet2DConditionModel = pipe.unet
             self.compel = Compel(
                 tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
                 text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
@@ -49,16 +60,19 @@ class Diffusion:
             )
             self.guidance_scale = 5.0
             self.add_time_ids = pipe._get_add_time_ids(
-                (self.vae.config.sample_size, self.vae.config.sample_size),
+                (pipe.vae.config.sample_size, pipe.vae.config.sample_size),
                 (0, 0),
-                (self.vae.config.sample_size, self.vae.config.sample_size),
-                dtype=self.unet.dtype,
+                (pipe.vae.config.sample_size, pipe.vae.config.sample_size),
+                dtype=pipe.unet.dtype,
                 text_encoder_projection_dim=pipe.text_encoder_2.config.projection_dim,
-            ).to(self.unet.device)
+            ).to(pipe.unet.device)
+        elif isinstance(pipe, StableDiffusion3Pipeline):
+            for p in pipe.transformer.parameters():
+                p.requires_grad = False
+            self.transformer: SD3Transformer2DModel = pipe.transformer
+            self.guidance_scale = 7.0
         else:
             raise ValueError(f"Invalid pipeline type: {type(pipe)}")
-        self.image_processor = pipe.image_processor
-        self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
 
     @torch.inference_mode()
     def encode_prompt(self, text: str) -> T | Tuple[T, T]:

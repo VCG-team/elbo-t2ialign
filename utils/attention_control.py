@@ -156,12 +156,10 @@ class AttentionStoreHook(AttentionHook):
         self.self_att_mid_layer = down_s + (mid_s - 1) / 2
 
 
-def get_gaussian_weight(mean, sigma, length, is_cross=True):
+def get_gaussian_weight(mean, sigma, length):
     x = torch.arange(length, dtype=torch.float64)
     x = x - mean
     weights = torch.exp(-(x**2) / (2 * sigma**2))
-    if not is_cross:
-        weights = 1 - weights
     weights = weights / weights.sum() * length
     return weights
 
@@ -218,17 +216,6 @@ def aggregate_self_att(
     cur_res, cur_res_idx, cur_layer = None, 0, 0
     att_maps = hook.get_average_attention()
 
-    if len(config.self_gaussian_var) != 0:
-        weights = [
-            get_gaussian_weight(
-                hook.self_att_mid_layer,
-                config.self_gaussian_var[i],
-                len(att_maps["self_att"]),
-                False,
-            )
-            for i in range(len(config.self_gaussian_var))
-        ]
-
     for att_map in att_maps["self_att"]:  # attn shape: (batch, res*res, res*res)
         res = round(sqrt(att_map.shape[1]))
         if max_res is None:
@@ -243,15 +230,9 @@ def aggregate_self_att(
         att = F.interpolate(att, size=(max_res, max_res), mode="bilinear")
         att = att.repeat_interleave(round(max_res / res), dim=0)
         att = att.repeat_interleave(round(max_res / res), dim=1)
-        if len(config.self_gaussian_var) != 0:
-            weight = [
-                weights[i][cur_layer] for i in range(len(config.self_gaussian_var))
-            ]
-        else:
-            weight = [
-                config.self_weight[i][cur_res_idx]
-                for i in range(len(config.self_weight))
-            ]
+        weight = [
+            config.self_weight[i][cur_res_idx] for i in range(len(config.self_weight))
+        ]
         for i in range(len(weight)):
             out[i] += att * weight[i]  # apply weight
             weight_sum[i] += weight[i]

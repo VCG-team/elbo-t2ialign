@@ -1,0 +1,644 @@
+# metainfo for ade20k dataset
+dataset: ade20k
+data_root: ./datasets/ade/ADEChallengeData2016
+data_name_list: ./data/ade20k/val_id.txt
+name_to_cls_labels: ./data/ade20k/cls_labels.npy
+img_path: "{data_root}/images/validation/{img_name}.jpg"
+gt_path: "{data_root}/annotations/validation/{img_name}.png"
+num_cls: 150
+category:
+  wall:
+    - wall
+  building:
+    - building
+    - edifice
+  sky:
+    - sky
+  floor:
+    - floor
+    - flooring
+  tree:
+    - tree
+  ceiling:
+    - ceiling
+  road:
+    - road
+    - route
+  "bed ":
+    - bed
+  windowpane:
+    - windowpane
+    - window
+  grass:
+    - grass
+  cabinet:
+    - cabinet
+  sidewalk:
+    - sidewalk
+    - pavement
+  person:
+    - person
+    - individual
+    - someone
+    - somebody
+    - mortal
+    - soul
+  earth:
+    - earth
+    - ground
+  door:
+    - door
+    - double door
+  table:
+    - table
+  mountain:
+    - mountain
+    - mount
+  plant:
+    - plant
+    - flora
+    - plant life
+  curtain:
+    - curtain
+    - drape
+    - drapery
+    - mantle
+    - pall
+  chair:
+    - chair
+  car:
+    - car
+    - auto
+    - automobile
+    - machine
+    - motorcar
+  water:
+    - water
+  painting:
+    - painting
+    - picture
+  sofa:
+    - sofa
+    - couch
+    - lounge
+  shelf:
+    - shelf
+  house:
+    - house
+  sea:
+    - sea
+  mirror:
+    - mirror
+  rug:
+    - rug
+    - carpet
+    - carpeting
+  field:
+    - field
+  armchair:
+    - armchair
+  seat:
+    - seat
+  fence:
+    - fence
+    - fencing
+  desk:
+    - desk
+  rock:
+    - rock
+    - stone
+  wardrobe:
+    - wardrobe
+    - closet
+    - press
+  lamp:
+    - lamp
+  bathtub:
+    - bathtub
+    - bathing tub
+    - bath
+    - tub
+  railing:
+    - railing
+    - rail
+  cushion:
+    - cushion
+  base:
+    - base
+    - pedestal
+    - stand
+  box:
+    - box
+  column:
+    - column
+    - pillar
+  signboard:
+    - signboard
+    - sign
+  chest of drawers:
+    - chest of drawers
+    - chest
+    - bureau
+    - dresser
+  counter:
+    - counter
+  sand:
+    - sand
+  sink:
+    - sink
+  skyscraper:
+    - skyscraper
+  fireplace:
+    - fireplace
+    - hearth
+    - open fireplace
+  refrigerator:
+    - refrigerator
+    - icebox
+  grandstand:
+    - grandstand
+    - covered stand
+  path:
+    - path
+  stairs:
+    - stairs
+    - steps
+  runway:
+    - runway
+  case:
+    - case
+    - display case
+    - showcase
+    - vitrine
+  pool table:
+    - pool table
+    - billiard table
+    - snooker table
+  pillow:
+    - pillow
+  screen door:
+    - screen door
+    - screen
+  stairway:
+    - stairway
+    - staircase
+  river:
+    - river
+  bridge:
+    - bridge
+    - span
+  bookcase:
+    - bookcase
+  blind:
+    - blind
+    - screen
+  coffee table:
+    - coffee table
+    - cocktail table
+  toilet:
+    - toilet
+    - can
+    - commode
+    - crapper
+    - pot
+    - potty
+    - stool
+    - throne
+  flower:
+    - flower
+  book:
+    - book
+  hill:
+    - hill
+  bench:
+    - bench
+  countertop:
+    - countertop
+  stove:
+    - stove
+    - kitchen stove
+    - range
+    - kitchen range
+    - cooking stove
+  palm:
+    - palm
+    - palm tree
+  kitchen island:
+    - kitchen island
+  computer:
+    - computer
+    - computing machine
+    - computing device
+    - data processor
+    - electronic computer
+    - information processing system
+  swivel chair:
+    - swivel chair
+  boat:
+    - boat
+  bar:
+    - bar
+  arcade machine:
+    - arcade machine
+  hovel:
+    - hovel
+    - hut
+    - hutch
+    - shack
+    - shanty
+  bus:
+    - bus
+    - autobus
+    - coach
+    - charabanc
+    - double-decker
+    - jitney
+    - motorbus
+    - motorcoach
+    - omnibus
+    - passenger vehicle
+  towel:
+    - towel
+  light:
+    - light
+    - light source
+  truck:
+    - truck
+    - motortruck
+  tower:
+    - tower
+  chandelier:
+    - chandelier
+    - pendant
+    - pendent
+  awning:
+    - awning
+    - sunshade
+    - sunblind
+  streetlight:
+    - streetlight
+    - street lamp
+  booth:
+    - booth
+    - cubicle
+    - stall
+    - kiosk
+  television receiver:
+    - television receiver
+    - television
+    - television set
+    - tv
+    - tv set
+    - idiot box
+    - boob tube
+    - telly
+    - goggle box
+  airplane:
+    - airplane
+    - aeroplane
+    - plane
+  dirt track:
+    - dirt track
+  apparel:
+    - apparel
+    - wearing apparel
+    - dress
+    - clothes
+  pole:
+    - pole
+  land:
+    - land
+    - ground
+    - soil
+  bannister:
+    - bannister
+    - banister
+    - balustrade
+    - balusters
+    - handrail
+  escalator:
+    - escalator
+    - moving staircase
+    - moving stairway
+  ottoman:
+    - ottoman
+    - pouf
+    - pouffe
+    - puff
+    - hassock
+  bottle:
+    - bottle
+  buffet:
+    - buffet
+    - counter
+    - sideboard
+  poster:
+    - poster
+    - posting
+    - placard
+    - notice
+    - bill
+    - card
+  stage:
+    - stage
+  van:
+    - van
+  ship:
+    - ship
+  fountain:
+    - fountain
+  conveyer belt:
+    - conveyer belt
+    - conveyor belt
+    - conveyer
+    - conveyor
+    - transporter
+  canopy:
+    - canopy
+  washer:
+    - washer
+    - automatic washer
+    - washing machine
+  plaything:
+    - plaything
+    - toy
+  swimming pool:
+    - swimming pool
+    - swimming bath
+    - natatorium
+  stool:
+    - stool
+  barrel:
+    - barrel
+    - cask
+  basket:
+    - basket
+    - handbasket
+  waterfall:
+    - waterfall
+    - falls
+  tent:
+    - tent
+    - collapsible shelter
+  bag:
+    - bag
+  minibike:
+    - minibike
+    - motorbike
+  cradle:
+    - cradle
+  oven:
+    - oven
+  ball:
+    - ball
+  food:
+    - food
+    - solid food
+  step:
+    - step
+    - stair
+  tank:
+    - tank
+    - storage tank
+  trade name:
+    - trade name
+    - brand name
+    - brand
+    - marque
+  microwave:
+    - microwave
+    - microwave oven
+  pot:
+    - pot
+    - flowerpot
+  animal:
+    - animal
+    - animate being
+    - beast
+    - brute
+    - creature
+    - fauna
+  bicycle:
+    - bicycle
+    - bike
+    - wheel
+    - cycle
+  lake:
+    - lake
+  dishwasher:
+    - dishwasher
+    - dish washer
+    - dishwashing machine
+  screen:
+    - screen
+    - silver screen
+    - projection screen
+  blanket:
+    - blanket
+    - cover
+  sculpture:
+    - sculpture
+  hood:
+    - hood
+    - exhaust hood
+  sconce:
+    - sconce
+  vase:
+    - vase
+  traffic light:
+    - traffic light
+    - traffic signal
+    - stoplight
+  tray:
+    - tray
+  ashcan:
+    - ashcan
+    - trash can
+    - garbage can
+    - wastebin
+    - ash bin
+    - ash-bin
+    - ashbin
+    - dustbin
+    - trash barrel
+    - trash bin
+  fan:
+    - fan
+  pier:
+    - pier
+    - wharf
+    - wharfage
+    - dock
+  crt screen:
+    - crt screen
+  plate:
+    - plate
+  monitor:
+    - monitor
+    - monitoring device
+  bulletin board:
+    - bulletin board
+    - notice board
+  shower:
+    - shower
+  radiator:
+    - radiator
+  glass:
+    - glass
+    - drinking glass
+  clock:
+    - clock
+  flag:
+    - flag
+bg_category: []
+cls2idx:
+  wall: 1
+  building: 2
+  sky: 3
+  floor: 4
+  tree: 5
+  ceiling: 6
+  road: 7
+  bed: 8
+  windowpane: 9
+  grass: 10
+  cabinet: 11
+  sidewalk: 12
+  person: 13
+  earth: 14
+  door: 15
+  table: 16
+  mountain: 17
+  plant: 18
+  curtain: 19
+  chair: 20
+  car: 21
+  water: 22
+  painting: 23
+  sofa: 24
+  shelf: 25
+  house: 26
+  sea: 27
+  mirror: 28
+  rug: 29
+  field: 30
+  armchair: 31
+  seat: 32
+  fence: 33
+  desk: 34
+  rock: 35
+  wardrobe: 36
+  lamp: 37
+  bathtub: 38
+  railing: 39
+  cushion: 40
+  base: 41
+  box: 42
+  column: 43
+  signboard: 44
+  chest of drawers: 45
+  counter: 46
+  sand: 47
+  sink: 48
+  skyscraper: 49
+  fireplace: 50
+  refrigerator: 51
+  grandstand: 52
+  path: 53
+  stairs: 54
+  runway: 55
+  case: 56
+  pool table: 57
+  pillow: 58
+  screen door: 59
+  stairway: 60
+  river: 61
+  bridge: 62
+  bookcase: 63
+  blind: 64
+  coffee table: 65
+  toilet: 66
+  flower: 67
+  book: 68
+  hill: 69
+  bench: 70
+  countertop: 71
+  stove: 72
+  palm: 73
+  kitchen island: 74
+  computer: 75
+  swivel chair: 76
+  boat: 77
+  bar: 78
+  arcade machine: 79
+  hovel: 80
+  bus: 81
+  towel: 82
+  light: 83
+  truck: 84
+  tower: 85
+  chandelier: 86
+  awning: 87
+  streetlight: 88
+  booth: 89
+  television receiver: 90
+  airplane: 91
+  dirt track: 92
+  apparel: 93
+  pole: 94
+  land: 95
+  bannister: 96
+  escalator: 97
+  ottoman: 98
+  bottle: 99
+  buffet: 100
+  poster: 101
+  stage: 102
+  van: 103
+  ship: 104
+  fountain: 105
+  conveyer belt: 106
+  canopy: 107
+  washer: 108
+  plaything: 109
+  swimming pool: 110
+  stool: 111
+  barrel: 112
+  basket: 113
+  waterfall: 114
+  tent: 115
+  bag: 116
+  minibike: 117
+  cradle: 118
+  oven: 119
+  ball: 120
+  food: 121
+  step: 122
+  tank: 123
+  trade name: 124
+  microwave: 125
+  pot: 126
+  animal: 127
+  bicycle: 128
+  lake: 129
+  dishwasher: 130
+  screen: 131
+  blanket: 132
+  sculpture: 133
+  hood: 134
+  sconce: 135
+  vase: 136
+  traffic light: 137
+  tray: 138
+  ashcan: 139
+  fan: 140
+  pier: 141
+  crt screen: 142
+  plate: 143
+  monitor: 144
+  bulletin board: 145
+  shower: 146
+  radiator: 147
+  glass: 148
+  clock: 149
+  flag: 150

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from cv2 import imwrite
-from diffusers import AutoPipelineForText2Image
+from diffusers import AutoPipelineForText2Image, StableDiffusion3Pipeline
 from diffusers.models.attention_processor import Attention
 from PIL import Image
 from tqdm import tqdm
@@ -90,7 +90,10 @@ if __name__ == "__main__":
         device_map=config.diffusion.device_map,
     )
     # register attention processor for attention hooks
-    pipe.unet.set_attn_processor(AttnProcessor())
+    if isinstance(pipe, StableDiffusion3Pipeline):
+        pipe.transformer.set_attn_processor(AttnProcessor())
+    else:
+        pipe.unet.set_attn_processor(AttnProcessor())
     store_hook = AvgAttentionStoreHook(pipe)
     diffusion = Diffusion(pipe)
 

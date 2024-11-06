@@ -8,7 +8,7 @@ output_folder=$(basename $0 | rev | cut -d '.' -f 2- | rev)
 output_path="./output/${output_folder}"
 
 # experiment datasets
-datasets=("voc_sim" "coco_cap" "voc" "context" "coco")
+datasets=("voc_sim" "coco_cap" "voc" "context" "coco" "ade20k")
 # which dataset variant to use, supported:
 # 1. "": original dataset
 # 2. "_100": small dataset(100 images) randomly selected from original dataset
