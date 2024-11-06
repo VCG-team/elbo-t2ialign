@@ -24,7 +24,7 @@ category:
   road:
     - road
     - route
-  "bed ":
+  bed:
     - bed
   windowpane:
     - windowpane

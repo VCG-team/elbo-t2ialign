@@ -58,7 +58,7 @@ def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
     for predict_file in os.listdir(predict_folder):
         # predict_file format: {idx}_{cls_name}.png
         idx = int(predict_file.split("_")[0])
-        cls = predict_file.split("_")[1].split(".")[0]
+        cls = predict_file.split("_")[1].split(".")[0].strip()
         idx_to_cls[idx].append(cls)
     # load dataset
     dataset = SegDataset(config)
@@ -83,7 +83,9 @@ def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
             # search cls_idx
             cls_idx = 1
             for cls_name in config.category:
-                if cls == str(cls_name) or cls in config.category[cls_name]:
+                if (cls == str(cls_name).strip()) or (
+                    cls in [n.strip() for n in config.category[cls_name]]
+                ):
                     break
                 cls_idx += 1
             if cls_idx == num_cls:
