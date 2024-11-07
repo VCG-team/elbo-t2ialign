@@ -120,24 +120,28 @@ if __name__ == "__main__":
                 continue
 
             # 1. get elbo of each class
-            elbo = []
-            for cls_idx in labels:
-                source_cls = category[cls_idx]
-                elbo_prompt = config.elbo_text.prompt.format(source_cls=source_cls)
-                elbo_gen = img2text(img, name, elbo_prompt)
-                elbo_text = config.elbo_text.template.format(
-                    source_cls=source_cls, elbo_gen=elbo_gen
-                )
-                text_emb_source = diffusion.encode_prompt(elbo_text)
-                loss = 0
-                for idx, t in enumerate(elbo_timesteps):
-                    loss += diffusion.get_elbo(
-                        z_source, text_emb_source, t, elbo_noise[idx]
+            if config.fix_temperature:
+                one = torch.ones(len(labels), device=z_source.device)
+                temperature = torch.pow(config.elbo_strength, one)
+            else:
+                elbo = []
+                for cls_idx in labels:
+                    source_cls = category[cls_idx]
+                    elbo_prompt = config.elbo_text.prompt.format(source_cls=source_cls)
+                    elbo_gen = img2text(img, name, elbo_prompt)
+                    elbo_text = config.elbo_text.template.format(
+                        source_cls=source_cls, elbo_gen=elbo_gen
                     )
-                elbo.append(loss)
-            elbo = torch.stack(elbo)
-            elbo_min_max = (elbo - elbo.min()) / (elbo.max() - elbo.min() + 1e-10)
-            temperature = torch.pow(config.elbo_strength, elbo_min_max)
+                    text_emb_source = diffusion.encode_prompt(elbo_text)
+                    loss = 0
+                    for idx, t in enumerate(elbo_timesteps):
+                        loss += diffusion.get_elbo(
+                            z_source, text_emb_source, t, elbo_noise[idx]
+                        )
+                    elbo.append(loss)
+                elbo = torch.stack(elbo)
+                elbo_min_max = (elbo - elbo.min()) / (elbo.max() - elbo.min() + 1e-10)
+                temperature = torch.pow(config.elbo_strength, elbo_min_max)
 
             # 2. collect attention maps
             source_text = "a photo of " + ", ".join(

@@ -34,6 +34,7 @@ collect_timesteps:
 loss_type: "dds" # loss function, "dds" or "sds" or "cds" or "none"
 lr: 1.0e-1 # learning rate
 elbo_strength: 5.0 # strength of using elbo to normalize cross attention
+fix_temperature: False # whether to fix temperature of normalizing cross attention
 guidance_scale: null # null or float, if null, use the default value of pipeline
 save_img: False # whether to save optimized images(decoded z_target)
 save_cross_att: False # whether to save cross attention maps
