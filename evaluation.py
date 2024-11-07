@@ -79,7 +79,11 @@ def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
         # get all cls predict in this image
         for cls in idx_to_cls[idx]:
             predict_file = os.path.join(predict_folder, f"{idx}_{cls}.png")
-            predict_cls = np.array(Image.open(predict_file), dtype=np.float32) / 255
+            predict_file = Image.open(predict_file).convert("L")
+            # if predict shape is not equal to gt shape, resize it
+            if predict_file.size != (w, h):
+                predict_file = predict_file.resize((w, h), Image.Resampling.BILINEAR)
+            predict_cls = np.array(predict_file, dtype=np.float32) / 255
             # search cls_idx
             cls_idx = 1
             for cls_name in config.category:
