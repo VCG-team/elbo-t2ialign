@@ -215,8 +215,22 @@ class Diffusion:
             elbo: evidence lower bound (diffusion loss)
         """
         z_t, eps = self.noise_input(z, timestep, eps)
-        eps_pred = self.get_eps_prediction(
+        model_output = self.get_eps_prediction(
             [z_t], [timestep], [text_emb], cross_attention_kwargs
         )
-        elbo = F.mse_loss(eps, eps_pred, reduction="mean")
-        return elbo
+        # copied from diffusers.DDIMScheduler.step
+        alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
+        beta_prod_t = 1 - alpha_prod_t
+        if self.scheduler.config.prediction_type == "sample":
+            pred_original_sample = model_output
+            pred_epsilon = (
+                z_t - alpha_prod_t ** (0.5) * pred_original_sample
+            ) / beta_prod_t ** (0.5)
+        elif self.scheduler.config.prediction_type == "v_prediction":
+            pred_original_sample = (alpha_prod_t**0.5) * z_t - (
+                beta_prod_t**0.5
+            ) * model_output
+            pred_epsilon = (alpha_prod_t**0.5) * model_output + (beta_prod_t**0.5) * z_t
+        else:
+            pred_epsilon = model_output
+        return F.mse_loss(eps, pred_epsilon, reduction="mean")
