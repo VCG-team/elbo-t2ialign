@@ -74,6 +74,10 @@ if __name__ == "__main__":
         if os.path.exists(cross_att_out_path):
             shutil.rmtree(cross_att_out_path)
         os.makedirs(cross_att_out_path, exist_ok=True)
+    if config.elbo_path:
+        if not os.path.exists(config.elbo_path):
+            raise FileNotFoundError(f"ELBO file not found: {config.elbo_path}")
+        elbo_dict = json.load(open(config.elbo_path))
     if config.save_elbo:
         saved_elbo = {}
     dataset = SegDataset(config)
@@ -123,10 +127,16 @@ if __name__ == "__main__":
                 continue
 
             # 1. get elbo of each class
-            if config.fix_temperature:
-                one = torch.ones(len(labels), device=z_source.device)
-                temperature = torch.pow(config.elbo_strength, one)
-            else:
+            if config.fix_temperature:  # use fixed temperature
+                elbo_min_max = torch.ones(len(labels), device=z_source.device)
+                temperature = torch.pow(config.elbo_strength, elbo_min_max)
+            elif config.elbo_path:  # use elbo from file
+                elbo_min_max = [
+                    elbo_dict[name][category[cls_idx]] for cls_idx in labels
+                ]
+                elbo_min_max = torch.tensor(elbo_min_max, device=z_source.device)
+                temperature = torch.pow(config.elbo_strength, elbo_min_max)
+            else:  # recompute elbo
                 elbo = []
                 for cls_idx in labels:
                     source_cls = category[cls_idx]
@@ -144,11 +154,11 @@ if __name__ == "__main__":
                     elbo.append(loss)
                 elbo = torch.stack(elbo)
                 elbo_min_max = (elbo - elbo.min()) / (elbo.max() - elbo.min() + 1e-10)
-                if config.save_elbo:
-                    saved_elbo[name] = {}
-                    for idx, cls_idx in enumerate(labels):
-                        saved_elbo[name][category[cls_idx]] = elbo_min_max[idx].item()
                 temperature = torch.pow(config.elbo_strength, elbo_min_max)
+            if config.save_elbo:
+                saved_elbo[name] = {}
+                for idx, cls_idx in enumerate(labels):
+                    saved_elbo[name][category[cls_idx]] = elbo_min_max[idx].item()
 
             # 2. collect attention maps
             source_text = "a photo of " + ", ".join(

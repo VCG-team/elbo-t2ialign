@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import shutil
@@ -114,6 +115,10 @@ if __name__ == "__main__":
         if os.path.exists(cross_att_out_path):
             shutil.rmtree(cross_att_out_path)
         os.makedirs(cross_att_out_path, exist_ok=True)
+    if config.elbo_path:
+        if not os.path.exists(config.elbo_path):
+            raise FileNotFoundError(f"ELBO file not found: {config.elbo_path}")
+        elbo_dict = json.load(open(config.elbo_path))
     dataset = SegDataset(config)
     img2text = Img2Text(config)
     category = list(config.category.keys())
@@ -244,9 +249,9 @@ if __name__ == "__main__":
                 loss = config.dds_loss_weight * tmp_loss
                 if config.loss_type == "cds":
                     tmp_loss = 0
-                    for name, module in pipe.unet.named_modules():
+                    for module_name, module in pipe.unet.named_modules():
                         if type(module).__name__ == "Attention":
-                            if "attn1" in name and "up" in name:
+                            if "attn1" in module_name and "up" in module_name:
                                 out = module.self_out
                                 tmp_loss += cut_loss.get_attn_cut_loss(
                                     out[0:1], out[1:]
@@ -279,15 +284,14 @@ if __name__ == "__main__":
 
             # 6. refine cross attention map and optionally save cross attention as mask
             mask = aggregate_cross_att(store_hook, 0, pos, config)
+            mask = (mask - mask.min()) / (mask.max() - mask.min())
+            if config.elbo_path:
+                mask = mask ** (config.elbo_strength ** elbo_dict[name][source_cls])
             if config.save_cross_att:
                 max_res = round(sqrt(mask.shape[0]))
                 cross_att = mask.view(1, 1, max_res, max_res)
                 cross_att = F.interpolate(cross_att, size=(h, w), mode="bilinear")
-                cross_att = (
-                    (cross_att - cross_att.min())
-                    / (cross_att.max() - cross_att.min())
-                    * 255
-                )
+                cross_att = cross_att.clamp(0, 1) * 255
                 cross_att = cross_att.squeeze().cpu().numpy()
                 imwrite(f"{cross_att_out_path}/{k}_{category[cls_idx]}.png", cross_att)
             self_att = aggregate_self_att(store_hook, 0, config)
