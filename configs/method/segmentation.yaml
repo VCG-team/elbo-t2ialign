@@ -38,6 +38,7 @@ fix_temperature: False # whether to fix temperature of normalizing cross attenti
 guidance_scale: null # null or float, if null, use the default value of pipeline
 save_img: False # whether to save optimized images(decoded z_target)
 save_cross_att: False # whether to save cross attention maps
+save_elbo: False # whether to save relative elbo
 
 # attention control settings (attention_control.py)
 # diffusion models use unet/dit with cross/self attentions to predict noise

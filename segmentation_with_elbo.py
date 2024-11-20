@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import shutil
@@ -73,6 +74,8 @@ if __name__ == "__main__":
         if os.path.exists(cross_att_out_path):
             shutil.rmtree(cross_att_out_path)
         os.makedirs(cross_att_out_path, exist_ok=True)
+    if config.save_elbo:
+        saved_elbo = {}
     dataset = SegDataset(config)
     img2text = Img2Text(config)
     category = list(config.category.keys())
@@ -141,6 +144,10 @@ if __name__ == "__main__":
                     elbo.append(loss)
                 elbo = torch.stack(elbo)
                 elbo_min_max = (elbo - elbo.min()) / (elbo.max() - elbo.min() + 1e-10)
+                if config.save_elbo:
+                    saved_elbo[name] = {}
+                    for idx, cls_idx in enumerate(labels):
+                        saved_elbo[name][category[cls_idx]] = elbo_min_max[idx].item()
                 temperature = torch.pow(config.elbo_strength, elbo_min_max)
 
             # 2. collect attention maps
@@ -194,3 +201,8 @@ if __name__ == "__main__":
                 mask = (mask - mask.min()) / (mask.max() - mask.min()) * 255
                 mask = mask.squeeze().cpu().numpy()
                 imwrite(f"{mask_out_path}/{k}_{source_cls}.png", mask)
+
+    # save elbo optionally as json
+    if config.save_elbo:
+        with open(f"{config.output_path}/elbo_min_max.json", "w") as f:
+            json.dump(saved_elbo, f)

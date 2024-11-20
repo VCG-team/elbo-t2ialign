@@ -33,7 +33,7 @@
             "args": [
                 "save_img=True",
                 "save_cross_att=True",
-                "elbo_strength=5"
+                "elbo_strength=3",
             ]
         },
         {
