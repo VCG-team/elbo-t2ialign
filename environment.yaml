@@ -1,4 +1,4 @@
-name: ddsseg
+name: elbo-t2ialign
 channels:
   - pytorch
   - nvidia

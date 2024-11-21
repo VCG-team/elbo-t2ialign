@@ -1,14 +1,14 @@
-# DDSSEG
+# ELBO-T2IAlign
 
 ## Setup
 
 ### Python Environment
 
-A suitable [conda](https://conda.io/) environment named `ddsseg` can be created and setup with:
+A suitable [conda](https://conda.io/) environment named `elbo-t2ialign` can be created and setup with:
 
 ```bash
 conda env create -f environment.yaml
-conda activate ddsseg
+conda activate elbo-t2ialign
 # download spacy model for part-of-speech tags
 python -m spacy download en_core_web_sm
 ```
@@ -19,7 +19,7 @@ python -m spacy download en_core_web_sm
 
 2. After preparing these datasets, please link them to the project folder. The overall file structure is as follows(all the datasets are linked to `./datasets`):
     ```
-    ddsseg
+    elbo-t2ialign
     ├── configs
     ├── data
     ├── utils

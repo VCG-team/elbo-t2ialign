@@ -234,3 +234,34 @@ class Diffusion:
         else:
             pred_epsilon = model_output
         return F.mse_loss(eps, pred_epsilon, reduction="mean")
+
+    def generate_image(
+        self, prompt: str, negtive_prompt: str = "", sample_timesteps: int = 50
+    ) -> Image:
+        # 1. prepare latent
+        channel = self.unet.config.in_channels
+        height = self.unet.config.sample_size
+        width = self.unet.config.sample_size
+        latent = torch.randn(
+            1, channel, height, width, device=self.unet.device, dtype=self.unet.dtype
+        )
+
+        # 2. prepare text embedding
+        pos_text_emb = self.encode_prompt(prompt)
+        neg_text_emb = self.encode_prompt(negtive_prompt)
+
+        # 3. prepare timesteps
+        train_timesteps = self.scheduler.config.num_train_timesteps
+        step_ratio = train_timesteps // sample_timesteps
+        timesteps = list(range(train_timesteps - 1, 0, -step_ratio))
+
+        # 4. reverse diffusion process
+        for t in timesteps:
+            eps_pred_cond, eps_pred_uncond = self.get_eps_prediction(
+                [latent, latent], [t, t], [pos_text_emb, neg_text_emb]
+            ).chunk(2)
+            eps_pred = self.classifier_free_guidance(eps_pred_uncond, eps_pred_cond)
+            latent = self.step(latent, t, max(0, t - step_ratio), eps_pred)
+
+        # 5. decode latent to image
+        return self.decode_latent(latent)[0]
