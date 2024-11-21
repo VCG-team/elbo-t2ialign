@@ -92,7 +92,7 @@ if __name__ == "__main__":
     pipe = AutoPipelineForText2Image.from_pretrained(
         config.diffusion.variant,
         torch_dtype=diffusion_dtype,
-        use_safetensors=True,
+        use_safetensors=config.diffusion.use_safetensors,
         cache_dir=config.model_dir,
         device_map=config.diffusion.device_map,
     )
@@ -127,7 +127,9 @@ if __name__ == "__main__":
                 continue
 
             # 1. get elbo of each class
-            if config.fix_temperature:  # use fixed temperature
+            if (
+                config.fix_temperature or config.elbo_strength == 1
+            ):  # use fixed temperature
                 elbo_min_max = torch.ones(len(labels), device=z_source.device)
                 temperature = torch.pow(config.elbo_strength, elbo_min_max)
             elif config.elbo_path:  # use elbo from file

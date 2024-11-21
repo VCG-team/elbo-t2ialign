@@ -135,7 +135,7 @@ if __name__ == "__main__":
     pipe = AutoPipelineForText2Image.from_pretrained(
         config.diffusion.variant,
         torch_dtype=diffusion_dtype,
-        use_safetensors=True,
+        use_safetensors=config.diffusion.use_safetensors,
         cache_dir=config.model_dir,
         device_map=config.diffusion.device_map,
     )

@@ -28,6 +28,7 @@ diffusion:
   variant: "runwayml/stable-diffusion-v1-5"
   device_map: "balanced"
   dtype: "fp16"
+  use_safetensors: True
 clip:
   variant: "openai/clip-vit-large-patch14"
   device_map: "balanced"

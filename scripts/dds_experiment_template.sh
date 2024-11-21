@@ -36,7 +36,7 @@ EOS
 # segmentation_with_dds.py arguments using here document, see full list of options in ./config/method/segmentation.yaml
 # clip.variant options: openai/clip-vit-large-patch14
 # img2text.variant options: Salesforce/blip-image-captioning-large, Salesforce/blip2-opt-2.7b
-# diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base
+# diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3
 segmentation_args=$(cat << EOS
 save_img=${save_img}
 save_cross_att=${save_cross_att}
