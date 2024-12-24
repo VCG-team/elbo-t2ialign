@@ -5,30 +5,30 @@ channels:
   - defaults
 dependencies:
   - python=3.11.9
-  - pip=24.2
-  - pytorch=2.5.0
+  - pip=24.3.1
+  - pytorch=2.5.1
   - pip:
-      - compel==2.0.2
-      - diffusers==0.31.0
+      - compel==2.0.3
+      - diffusers==0.32.0
       - einops==0.8.0
       - numpy==2.0.2
       - omegaconf==2.3.0
       - opencv-python==4.10.0.84
-      - pillow==10.4.0
-      - spacy==3.8.2
-      - tqdm==4.66.5
-      - transformers==4.46.0
-      - accelerate==0.34.2
-      - scikit-learn==1.5.2
+      - pillow==11.0.0
+      - spacy==3.8.3
+      - tqdm==4.67.1
+      - transformers==4.47.1
+      - accelerate==1.2.1
+      - scikit-learn==1.6.0
       - joblib==1.4.2
       - safetensors==0.4.5
       - diskcache==5.6.3
       - simplecrf==0.2.1.1
       - pandas==2.2.3
-      - itables==2.2.2
-      - matplotlib==3.9.2
-      - torchvision==0.20.0
-      - huggingface-hub==0.26.1
-      - protobuf==5.28.3
+      - itables==2.2.4
+      - matplotlib==3.10.0
+      - torchvision==0.20.1
+      - huggingface-hub==0.27.0
+      - protobuf==5.29.2
       - sentencepiece==0.2.0
-      - bitsandbytes==0.44.1
+      - bitsandbytes==0.45.0
