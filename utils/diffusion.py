@@ -113,10 +113,10 @@ class Diffusion:
             image, self.vae.config.sample_size, self.vae.config.sample_size
         )
         img_tensor = img_tensor.to(self.vae.device, dtype=self.vae.dtype)
-        z_tensor = (
-            self.vae.encode(img_tensor)["latent_dist"].mean
-            * self.vae.config.scaling_factor
-        )
+        z_tensor = self.vae.encode(img_tensor)["latent_dist"].mean
+        if hasattr(self.vae.config, "shift_factor") and self.vae.config.shift_factor:
+            z_tensor = z_tensor - self.vae.config.shift_factor
+        z_tensor = z_tensor * self.vae.config.scaling_factor
         if isinstance(self.pipe, StableDiffusion3Pipeline):
             return z_tensor.to(self.transformer.device, dtype=self.transformer.dtype)
         else:
@@ -125,9 +125,10 @@ class Diffusion:
     @torch.inference_mode()
     def decode_latent(self, latent: T) -> Image:
         latent = latent.to(self.vae.device, dtype=self.vae.dtype)
-        img_tensor = self.vae.decode(
-            latent / self.vae.config.scaling_factor, return_dict=False
-        )[0]
+        latent = latent / self.vae.config.scaling_factor
+        if hasattr(self.vae.config, "shift_factor") and self.vae.config.shift_factor:
+            latent = latent + self.vae.config.shift_factor
+        img_tensor = self.vae.decode(latent, return_dict=False)[0]
         return self.image_processor.postprocess(img_tensor)
 
     def noise_input(self, z_0: T, timestep: int, eps: TN = None) -> Tuple[T, T]:
@@ -219,10 +220,11 @@ class Diffusion:
         next_t: int,
         model_output: T,
     ) -> T:
+        model_output = model_output.to(cur_z_t.device, cur_z_t.dtype)
         # code modified from: diffusers.FlowMatchEulerDiscreteScheduler.step
         if isinstance(self.pipe, StableDiffusion3Pipeline):
-            cur_sigmas = self.sigmas[cur_t]
-            next_sigmas = self.sigmas[next_t]
+            cur_sigmas = self.sigmas[cur_t].to(cur_z_t.device, cur_z_t.dtype)
+            next_sigmas = self.sigmas[next_t].to(cur_z_t.device, cur_z_t.dtype)
             next_sample = cur_z_t + (next_sigmas - cur_sigmas) * model_output
         # deterministic DDIM sampling, also can be used for DDIM inversion, return next_z_t
         # paper: Null-text Inversion(CVPR 2023) https://ieeexplore.ieee.org/document/10205188
@@ -307,16 +309,30 @@ class Diffusion:
             pred_epsilon = model_output
         return F.mse_loss(eps, pred_epsilon, reduction="mean")
 
+    def prepare_latent(self) -> T:
+        if isinstance(self.pipe, StableDiffusion3Pipeline):
+            channel = self.transformer.config.in_channels
+            height = self.transformer.config.sample_size
+            width = self.transformer.config.sample_size
+        else:
+            channel = self.unet.config.in_channels
+            height = self.unet.config.sample_size
+            width = self.unet.config.sample_size
+        latent = torch.randn(
+            1,
+            channel,
+            height,
+            width,
+            device=self.pipe.device,
+            dtype=self.pipe.dtype,
+        )
+        return latent
+
     def generate_image(
         self, prompt: str, negtive_prompt: str = "", sample_timesteps: int = 50
     ) -> Image:
         # 1. prepare latent
-        channel = self.unet.config.in_channels
-        height = self.unet.config.sample_size
-        width = self.unet.config.sample_size
-        latent = torch.randn(
-            1, channel, height, width, device=self.unet.device, dtype=self.unet.dtype
-        )
+        latent = self.prepare_latent()
 
         # 2. prepare text embedding
         pos_text_emb = self.encode_prompt(prompt)

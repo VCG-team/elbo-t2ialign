@@ -6,6 +6,9 @@ output_path:
   voc_sim: "./output/voc_sim"
   coco_cap: "./output/coco_cap"
   ade20k: "./output/ade20k"
+  abc6k: "./output/abc6k"
+  ane: "./output/ane"
+  dvmp: "./output/dvmp"
 
 # input config
 # fix random seed

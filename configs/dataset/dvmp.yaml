@@ -1,0 +1,4 @@
+# metainfo for dvmp dataset
+dataset: dvmp
+dataset_type: generation
+text_data_path: "./datasets/DVMP.txt"

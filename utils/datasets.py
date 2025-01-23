@@ -91,10 +91,7 @@ def convert_dataset(img_paths, gt_paths, idx2cls, dataset_name):
 
 
 class SegDataset(Dataset):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config):
         self.name = config.dataset
         self.data_root = config.data_root
         self.img_name_list = load_img_name_list(config.data_name_list)
@@ -120,3 +117,17 @@ class SegDataset(Dataset):
 
     def __len__(self):
         return len(self.img_name_list)
+
+
+class TextDataset(Dataset):
+    def __init__(self, config):
+        self.text_data_path = config.text_data_path
+        with open(self.data_root, "r", encoding="utf-8") as f:
+            self.prompts = f.readlines()
+        self.prompts = [prompt.strip() for prompt in self.prompts]
+
+    def __len__(self):
+        return len(self.prompts)
+
+    def __getitem__(self, idx):
+        return self.prompts[idx]

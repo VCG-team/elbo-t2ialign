@@ -1,0 +1,4 @@
+# metainfo for abc6k dataset
+dataset: abc6k
+dataset_type: generation
+text_data_path: "./datasets/ABC-6K.txt"

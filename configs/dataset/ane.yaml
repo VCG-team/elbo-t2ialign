@@ -1,0 +1,4 @@
+# metainfo for ane dataset
+dataset: ane
+dataset_type: generation
+text_data_path: "./datasets/AnE.txt"
