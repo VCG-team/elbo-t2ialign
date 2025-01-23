@@ -30,10 +30,16 @@
             "request": "launch",
             "program": "${workspaceFolder}/segmentation_with_elbo.py",
             "console": "integratedTerminal",
+            "justMyCode": false,
             "args": [
                 "save_img=True",
                 "save_cross_att=True",
+                "cross_gaussian_var=3",
+                "self_weight=[[1]]",
+                "elbo_timesteps=[[1,999,50]]",
+                "collect_timesteps=[[20,201,20]]",
                 "elbo_strength=3",
+                "diffusion.variant=stabilityai/stable-diffusion-3.5-medium"
             ]
         },
         {

@@ -18,6 +18,7 @@ from tqdm import tqdm
 from utils.attention_control import (
     AttentionStoreHook,
     AttnProcessor,
+    JointAttnProcessor,
     aggregate_cross_att,
     aggregate_self_att,
 )
@@ -47,10 +48,18 @@ class AvgAttentionStoreHook(AttentionStoreHook):
         q: (b, h, i, d)
         k, v: (b, h, j, d)
         sim: (b, h, i, j)
-        out: (b, i, n)
+        out: (b, i, n) | ((b, i, n), (b, j, m))
         """
-        key = "cross_att" if attn.is_cross_attention else "self_att"
-        self.step_store[key].append(sim.mean(dim=1))
+        sim_mean = sim.mean(dim=1)
+        # sd3 like MMDiT attention will return a tuple
+        if isinstance(out, tuple):
+            img_len = out[0].shape[1]
+            txt_len = out[1].shape[1]
+            self.step_store["cross_att"].append(sim_mean[:, :img_len, -txt_len:])
+            self.step_store["self_att"].append(sim_mean[:, :img_len, :img_len])
+        else:
+            key = "cross_att" if attn.is_cross_attention else "self_att"
+            self.step_store[key].append(sim_mean)
         return out
 
 
@@ -98,7 +107,7 @@ if __name__ == "__main__":
     )
     # register attention processor for attention hooks
     if isinstance(pipe, StableDiffusion3Pipeline):
-        pipe.transformer.set_attn_processor(AttnProcessor())
+        pipe.transformer.set_attn_processor(JointAttnProcessor())
     else:
         pipe.unet.set_attn_processor(AttnProcessor())
     store_hook = AvgAttentionStoreHook(pipe)

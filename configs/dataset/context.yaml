@@ -112,7 +112,6 @@ category:
   water: ["water"]
   window: ["window"]
   wood: ["wood"]
-# TODO: construct PASCAL Context bg_category
 bg_category:
   [
     "lake",

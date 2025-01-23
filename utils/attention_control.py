@@ -75,6 +75,103 @@ class AttnProcessor:
         return out
 
 
+# Modified from default sd3 attention processor
+# link: https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py#L1399
+class JointAttnProcessor:
+
+    def __call__(
+        self,
+        attn: Attention,
+        hidden_states: torch.FloatTensor,
+        encoder_hidden_states: torch.FloatTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_hooks: List[AttentionHook] | None = None,
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        batch_size = hidden_states.shape[0]
+
+        # `sample` projections.
+        query = attn.to_q(hidden_states)
+        key = attn.to_k(hidden_states)
+        value = attn.to_v(hidden_states)
+
+        inner_dim = key.shape[-1]
+        head_dim = inner_dim // attn.heads
+
+        query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
+        if attn.norm_q is not None:
+            query = attn.norm_q(query)
+        if attn.norm_k is not None:
+            key = attn.norm_k(key)
+
+        # `context` projections.
+        if encoder_hidden_states is not None:
+            encoder_hidden_states_query_proj = attn.add_q_proj(encoder_hidden_states)
+            encoder_hidden_states_key_proj = attn.add_k_proj(encoder_hidden_states)
+            encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
+
+            encoder_hidden_states_query_proj = encoder_hidden_states_query_proj.view(
+                batch_size, -1, attn.heads, head_dim
+            ).transpose(1, 2)
+            encoder_hidden_states_key_proj = encoder_hidden_states_key_proj.view(
+                batch_size, -1, attn.heads, head_dim
+            ).transpose(1, 2)
+            encoder_hidden_states_value_proj = encoder_hidden_states_value_proj.view(
+                batch_size, -1, attn.heads, head_dim
+            ).transpose(1, 2)
+
+            if attn.norm_added_q is not None:
+                encoder_hidden_states_query_proj = attn.norm_added_q(
+                    encoder_hidden_states_query_proj
+                )
+            if attn.norm_added_k is not None:
+                encoder_hidden_states_key_proj = attn.norm_added_k(
+                    encoder_hidden_states_key_proj
+                )
+
+            query = torch.cat([query, encoder_hidden_states_query_proj], dim=2)
+            key = torch.cat([key, encoder_hidden_states_key_proj], dim=2)
+            value = torch.cat([value, encoder_hidden_states_value_proj], dim=2)
+
+        sim = torch.einsum("b h i d, b h j d -> b h i j", query, key) * attn.scale
+        sim = sim.softmax(dim=-1, dtype=sim.dtype)
+        hidden_states = torch.einsum("b h i j, b h j d -> b h i d", sim, value)
+        hidden_states = hidden_states.transpose(1, 2).reshape(
+            batch_size, -1, attn.heads * head_dim
+        )
+        hidden_states = hidden_states.to(query.dtype)
+
+        if encoder_hidden_states is not None:
+            # Split the attention outputs.
+            hidden_states, encoder_hidden_states = (
+                hidden_states[:, : residual.shape[1]],
+                hidden_states[:, residual.shape[1] :],
+            )
+            if not attn.context_pre_only:
+                encoder_hidden_states = attn.to_add_out(encoder_hidden_states)
+
+        # linear proj
+        hidden_states = attn.to_out[0](hidden_states)
+        # dropout
+        hidden_states = attn.to_out[1](hidden_states)
+
+        out = (
+            hidden_states
+            if encoder_hidden_states is None
+            else (hidden_states, encoder_hidden_states)
+        )
+
+        if attention_hooks is not None:
+            for attention_hook in attention_hooks:
+                out = attention_hook(attn, query, key, value, sim, out)
+
+        return out
+
+
 def count_diffusion_attention(pipe: AutoPipelineForText2Image):
     # return (self_att_count, cross_att_count)
     def count_att_layer(net_) -> Tuple[int, int]:
@@ -96,7 +193,7 @@ def count_diffusion_attention(pipe: AutoPipelineForText2Image):
     else:
         s, _ = count_att_layer(pipe.transformer)
         n, m = s // 3, s - s // 3 * 2
-        down_s, down_c, mid_s, mid_c, up_s, up_c = n, n, n, n, m, m
+        down_s, down_c, mid_s, mid_c, up_s, up_c = n, 0, n, 0, m, 0
     return down_s, down_c, mid_s, mid_c, up_s, up_c
 
 
@@ -153,15 +250,6 @@ class AttentionStoreHook(AttentionHook):
         self.step_store: Dict[str, TL] = self.get_empty_store()
         self.attention_store: Dict[str, TL] = {}
         self.cross_att_mid_layer = down_c + (mid_c - 1) / 2
-        self.self_att_mid_layer = down_s + (mid_s - 1) / 2
-
-
-def get_gaussian_weight(mean, sigma, length):
-    x = torch.arange(length, dtype=torch.float64)
-    x = x - mean
-    weights = torch.exp(-(x**2) / (2 * sigma**2))
-    weights = weights / weights.sum() * length
-    return weights
 
 
 @torch.inference_mode()
@@ -176,11 +264,14 @@ def aggregate_cross_att(
     att_maps = hook.get_average_attention()
 
     if config.cross_gaussian_var != 0:
-        weights = get_gaussian_weight(
-            hook.cross_att_mid_layer,
-            config.cross_gaussian_var,
-            len(att_maps["cross_att"]),
-        )
+        x = torch.arange(len(att_maps["cross_att"]), dtype=torch.float64)
+        if hook.cross_att_mid_layer < 0:  # stable diffusion 3
+            cross_att_mid_layer = (len(att_maps["cross_att"]) - 1) / 2
+        else:
+            cross_att_mid_layer = hook.cross_att_mid_layer
+        x = x - cross_att_mid_layer
+        weights = torch.exp(-(x**2) / (2 * config.cross_gaussian_var**2))
+        weights = weights / weights.sum() * len(att_maps["cross_att"])
 
     for att_map in att_maps["cross_att"]:  # attn shape: (batch, res*res, prompt len)
         res = round(sqrt(att_map.shape[1]))

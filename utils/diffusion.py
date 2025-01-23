@@ -31,16 +31,9 @@ class Diffusion:
         # image processor
         pipe.image_processor.config.resample = "bilinear"
         self.image_processor = pipe.image_processor
-        # alphas and sigmas
-        with torch.inference_mode():
-            alphas = torch.sqrt(pipe.scheduler.alphas_cumprod)
-            sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod)
-        self.alphas = alphas.to(pipe.unet.device, dtype=pipe.unet.dtype)
-        self.sigmas = sigmas.to(pipe.unet.device, dtype=pipe.unet.dtype)
-        # scheduler
-        self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
         # custom components for different pipelines
         if isinstance(pipe, StableDiffusionPipeline):
+            self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
             for p in pipe.unet.parameters():
                 p.requires_grad = False
             self.unet: UNet2DConditionModel = pipe.unet
@@ -48,7 +41,15 @@ class Diffusion:
                 tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder
             )
             self.guidance_scale = 7.5
+            with torch.inference_mode():
+                self.alphas = torch.sqrt(pipe.scheduler.alphas_cumprod).to(
+                    pipe.unet.device, dtype=pipe.unet.dtype
+                )
+                self.sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod).to(
+                    pipe.unet.device, dtype=pipe.unet.dtype
+                )
         elif isinstance(pipe, StableDiffusionXLPipeline):
+            self.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
             for p in pipe.unet.parameters():
                 p.requires_grad = False
             self.unet: UNet2DConditionModel = pipe.unet
@@ -59,6 +60,13 @@ class Diffusion:
                 requires_pooled=[False, True],
             )
             self.guidance_scale = 5.0
+            with torch.inference_mode():
+                self.alphas = torch.sqrt(pipe.scheduler.alphas_cumprod).to(
+                    pipe.unet.device, dtype=pipe.unet.dtype
+                )
+                self.sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod).to(
+                    pipe.unet.device, dtype=pipe.unet.dtype
+                )
             self.add_time_ids = pipe._get_add_time_ids(
                 (pipe.vae.config.sample_size, pipe.vae.config.sample_size),
                 (0, 0),
@@ -67,19 +75,37 @@ class Diffusion:
                 text_encoder_projection_dim=pipe.text_encoder_2.config.projection_dim,
             ).to(pipe.unet.device)
         elif isinstance(pipe, StableDiffusion3Pipeline):
+            self.scheduler = pipe.scheduler
             for p in pipe.transformer.parameters():
                 p.requires_grad = False
             self.transformer: SD3Transformer2DModel = pipe.transformer
             self.guidance_scale = 7.0
+            with torch.inference_mode():
+                self.sigmas = self.scheduler.sigmas.to(
+                    pipe.transformer.device, dtype=pipe.transformer.dtype
+                )
+                self.sigmas = torch.flip(self.sigmas, [0])
+                self.alphas = 1 - self.sigmas
+                self.timesteps = self.scheduler.timesteps
+                self.timesteps = torch.flip(self.timesteps, [0])
         else:
             raise ValueError(f"Invalid pipeline type: {type(pipe)}")
 
     @torch.inference_mode()
     def encode_prompt(self, text: str) -> T | Tuple[T, T]:
-        # use compel to do prompt weighting, blend, conjunction, etc.
-        # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
-        # compel usage: https://github.com/damian0815/compel/blob/main/doc/syntax.md
-        return self.compel(text)
+        if isinstance(self.pipe, StableDiffusion3Pipeline):
+            prompt_embeds, _, pooled_prompt_embeds, _ = self.pipe.encode_prompt(
+                prompt=text,
+                prompt_2=text,
+                prompt_3=text,
+                do_classifier_free_guidance=False,
+            )
+            return prompt_embeds, pooled_prompt_embeds
+        else:
+            # use compel to do prompt weighting, blend, conjunction, etc.
+            # related docs: https://huggingface.co/docs/diffusers/v0.27.2/en/using-diffusers/weighted_prompts
+            # compel usage: https://github.com/damian0815/compel/blob/main/doc/syntax.md
+            return self.compel(text)
 
     @torch.inference_mode()
     def encode_vae_image(self, image: Image) -> T:
@@ -91,7 +117,10 @@ class Diffusion:
             self.vae.encode(img_tensor)["latent_dist"].mean
             * self.vae.config.scaling_factor
         )
-        return z_tensor.to(self.unet.device, dtype=self.unet.dtype)
+        if isinstance(self.pipe, StableDiffusion3Pipeline):
+            return z_tensor.to(self.transformer.device, dtype=self.transformer.dtype)
+        else:
+            return z_tensor.to(self.unet.device, dtype=self.unet.dtype)
 
     @torch.inference_mode()
     def decode_latent(self, latent: T) -> Image:
@@ -114,7 +143,7 @@ class Diffusion:
         z_t = alpha_t * z_0 + sigma_t * eps
         return z_t, eps
 
-    def get_eps_prediction(
+    def get_model_prediction(
         self,
         z_t: List[T],
         timestep: List[int],
@@ -123,8 +152,7 @@ class Diffusion:
     ) -> T:
         batch_size = len(z_t)
         z_t = torch.cat(z_t)
-        timestep = torch.tensor(timestep, device=z_t.device, dtype=torch.long)
-        added_cond_kwargs = None
+        timestep = torch.tensor(timestep, dtype=torch.long)
         if isinstance(self.pipe, StableDiffusionXLPipeline):
             cond = torch.cat([emb[0] for emb in text_emb])
             pooled_cond = torch.cat([emb[1] for emb in text_emb])
@@ -133,21 +161,46 @@ class Diffusion:
                 "text_embeds": pooled_cond,
                 "time_ids": add_time_ids,
             }
-        else:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                model_output = self.unet(
+                    z_t,
+                    timestep.to(device=z_t.device),
+                    encoder_hidden_states=cond,
+                    added_cond_kwargs=added_cond_kwargs,
+                    cross_attention_kwargs=cross_attention_kwargs,
+                ).sample
+        elif isinstance(self.pipe, StableDiffusionPipeline):
             cond = torch.cat(text_emb)
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            e_t = self.unet(
-                z_t,
-                timestep,
-                encoder_hidden_states=cond,
-                added_cond_kwargs=added_cond_kwargs,
-                cross_attention_kwargs=cross_attention_kwargs,
-            ).sample
-        assert torch.isfinite(e_t).all()
-        return e_t
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                model_output = self.unet(
+                    z_t,
+                    timestep.to(device=z_t.device),
+                    encoder_hidden_states=cond,
+                    cross_attention_kwargs=cross_attention_kwargs,
+                ).sample
+        elif isinstance(self.pipe, StableDiffusion3Pipeline):
+            cond = torch.cat([emb[0] for emb in text_emb])
+            pooled_cond = torch.cat([emb[1] for emb in text_emb])
+            t = self.timesteps[timestep]
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                model_output = self.transformer(
+                    hidden_states=z_t,
+                    timestep=t.to(device=z_t.device),
+                    encoder_hidden_states=cond,
+                    pooled_projections=pooled_cond,
+                    return_dict=False,
+                    joint_attention_kwargs=cross_attention_kwargs,
+                )[0]
+        else:
+            raise ValueError(f"Invalid pipeline type: {type(self.pipe)}")
+        assert torch.isfinite(model_output).all()
+        return model_output
 
     def classifier_free_guidance(
-        self, eps_uncond: T, eps_cond: T, guidance_scale: Optional[float] = None
+        self,
+        model_output_uncond: T,
+        model_output_cond: T,
+        guidance_scale: Optional[float] = None,
     ) -> T:
         """
         do classifier free guidance
@@ -155,34 +208,50 @@ class Diffusion:
         """
         if guidance_scale is None:
             guidance_scale = self.guidance_scale
-        return eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+        return model_output_uncond + guidance_scale * (
+            model_output_cond - model_output_uncond
+        )
 
     def step(
         self,
         cur_z_t: T,
         cur_t: int,
         next_t: int,
-        eps_pred: T,
+        model_output: T,
     ) -> T:
-        """
-        deterministic DDIM sampling, also can be used for DDIM inversion, return next_z_t
-        paper: Null-text Inversion(CVPR 2023) https://ieeexplore.ieee.org/document/10205188
-        code from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
-        """
-        alpha_prod_t = self.scheduler.alphas_cumprod[cur_t]
-        alpha_prod_t_next = self.scheduler.alphas_cumprod[next_t]
-        beta_prod_t = 1 - alpha_prod_t
-        next_original_sample = (
-            cur_z_t - beta_prod_t**0.5 * eps_pred
-        ) / alpha_prod_t**0.5
-        next_sample_direction = (1 - alpha_prod_t_next) ** 0.5 * eps_pred
-        next_sample = (
-            alpha_prod_t_next**0.5 * next_original_sample + next_sample_direction
-        )
+        # code modified from: diffusers.FlowMatchEulerDiscreteScheduler.step
+        if isinstance(self.pipe, StableDiffusion3Pipeline):
+            cur_sigmas = self.sigmas[cur_t]
+            next_sigmas = self.sigmas[next_t]
+            next_sample = cur_z_t + (next_sigmas - cur_sigmas) * model_output
+        # deterministic DDIM sampling, also can be used for DDIM inversion, return next_z_t
+        # paper: Null-text Inversion(CVPR 2023) https://ieeexplore.ieee.org/document/10205188
+        # code modified from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+        else:
+            alpha_prod_t = self.scheduler.alphas_cumprod[cur_t]
+            alpha_prod_t_next = self.scheduler.alphas_cumprod[next_t]
+            beta_prod_t = 1 - alpha_prod_t
+            if self.scheduler.config.prediction_type == "sample":
+                pred_epsilon = (
+                    cur_z_t - alpha_prod_t ** (0.5) * model_output
+                ) / beta_prod_t ** (0.5)
+            elif self.scheduler.config.prediction_type == "v_prediction":
+                pred_epsilon = (alpha_prod_t**0.5) * model_output + (
+                    beta_prod_t**0.5
+                ) * cur_z_t
+            else:
+                pred_epsilon = model_output
+            next_original_sample = (
+                cur_z_t - beta_prod_t**0.5 * pred_epsilon
+            ) / alpha_prod_t**0.5
+            next_sample_direction = (1 - alpha_prod_t_next) ** 0.5 * pred_epsilon
+            next_sample = (
+                alpha_prod_t_next**0.5 * next_original_sample + next_sample_direction
+            )
         return next_sample
 
     @torch.inference_mode
-    def ddim_inversion(self, z_0: T, timesteps: List[int], cond_emb: T) -> List[T]:
+    def inversion(self, z_0: T, timesteps: List[int], cond_emb: T) -> List[T]:
         """
         denote timesteps as [t1, t2, ..., tn], invert z_0 to z_t1, z_t2, ..., z_tn sequentially
         return: [z_t1, z_t2, ..., z_tn]
@@ -191,8 +260,8 @@ class Diffusion:
         z_ts = []
         cur_t, cur_z = 0, z_0.clone().detach()
         for t in timesteps:
-            eps_pred = self.get_eps_prediction([cur_z], [t], [cond_emb])
-            cur_z = self.step(cur_z, cur_t, t, eps_pred)
+            model_output = self.get_model_prediction([cur_z], [t], [cond_emb])
+            cur_z = self.step(cur_z, cur_t, t, model_output)
             cur_t = t
             z_ts.append(cur_z)
         return z_ts
@@ -215,10 +284,13 @@ class Diffusion:
             elbo: evidence lower bound (diffusion loss)
         """
         z_t, eps = self.noise_input(z, timestep, eps)
-        model_output = self.get_eps_prediction(
+        model_output = self.get_model_prediction(
             [z_t], [timestep], [text_emb], cross_attention_kwargs
         )
-        # copied from diffusers.DDIMScheduler.step
+        # flow matching loss, modified from https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/train_dreambooth_sd3.py#L1631
+        if isinstance(self.pipe, StableDiffusion3Pipeline):
+            return F.mse_loss(eps - z, model_output, reduction="mean")
+        # other loss function, copied from diffusers.DDIMScheduler.step
         alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
         beta_prod_t = 1 - alpha_prod_t
         if self.scheduler.config.prediction_type == "sample":
@@ -257,11 +329,13 @@ class Diffusion:
 
         # 4. reverse diffusion process
         for t in timesteps:
-            eps_pred_cond, eps_pred_uncond = self.get_eps_prediction(
+            model_output_cond, model_output_uncond = self.get_model_prediction(
                 [latent, latent], [t, t], [pos_text_emb, neg_text_emb]
             ).chunk(2)
-            eps_pred = self.classifier_free_guidance(eps_pred_uncond, eps_pred_cond)
-            latent = self.step(latent, t, max(0, t - step_ratio), eps_pred)
+            model_output = self.classifier_free_guidance(
+                model_output_uncond, model_output_cond
+            )
+            latent = self.step(latent, t, max(0, t - step_ratio), model_output)
 
         # 5. decode latent to image
         return self.decode_latent(latent)[0]

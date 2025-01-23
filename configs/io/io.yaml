@@ -39,6 +39,8 @@ img2text:
   # see: https://github.com/huggingface/transformers/issues/29786
   device_map: "cuda:0"
   dtype: "fp32"
-  # if api_url is not None, use api to convert image to text
+  # if api_url is not None, use web api to convert image to text
   api_key: null
   api_url: null
+  system_prompt: ""
+  max_completion_tokens: 70

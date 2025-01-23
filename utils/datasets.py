@@ -5,7 +5,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from PIL import Image
 from torch.utils.data import Dataset
 
@@ -93,7 +93,7 @@ def convert_dataset(img_paths, gt_paths, idx2cls, dataset_name):
 class SegDataset(Dataset):
     def __init__(
         self,
-        config: DictConfig,
+        config,
     ):
         self.name = config.dataset
         self.data_root = config.data_root

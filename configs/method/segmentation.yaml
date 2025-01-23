@@ -26,7 +26,7 @@ optimize_timesteps:
 elbo_timesteps:
   - [1, 999, 50]
 # whether to use ddim inversion to optimize image
-ddim_inversion: False
+do_inversion: False
 # timesteps to collect attention maps, default to align with ddim inversion default step
 # format: [start, end(exclude), step] or ["random", start, end(include), num]
 collect_timesteps:

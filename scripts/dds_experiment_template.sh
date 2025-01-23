@@ -36,7 +36,7 @@ EOS
 # segmentation_with_dds.py arguments using here document, see full list of options in ./config/method/segmentation.yaml
 # clip.variant options: openai/clip-vit-large-patch14
 # img2text.variant options: Salesforce/blip-image-captioning-large, Salesforce/blip2-opt-2.7b
-# diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3
+# diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3, stabilityai/stable-diffusion-3.5-medium, stabilityai/stable-diffusion-3-medium-diffusers
 segmentation_args=$(cat << EOS
 save_img=${save_img}
 save_cross_att=${save_cross_att}
@@ -46,7 +46,6 @@ collect_timesteps=[[20,201,20]]
 target_factor=0.5
 diffusion.variant=stabilityai/sdxl-turbo
 cross_gaussian_var=3
-self_gaussian_var=[15,2]
 loss_type=cds
 EOS
 )

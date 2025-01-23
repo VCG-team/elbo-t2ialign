@@ -20,6 +20,7 @@ from utils.attention_control import (
     AttentionHook,
     AttentionStoreHook,
     AttnProcessor,
+    JointAttnProcessor,
     aggregate_cross_att,
     aggregate_self_att,
 )
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     )
     # register attention processor for attention hooks
     if isinstance(pipe, StableDiffusion3Pipeline):
-        pipe.transformer.set_attn_processor(AttnProcessor())
+        pipe.transformer.set_attn_processor(JointAttnProcessor())
     else:
         pipe.unet.set_attn_processor(AttnProcessor())
     store_hook = BlendAttentionStoreHook(pipe, config)
@@ -222,7 +223,7 @@ if __name__ == "__main__":
                     z_t_source, eps = diffusion.noise_input(z_source, timestep, None)
                     z_t_target, _ = diffusion.noise_input(z_target, timestep, eps)
                     eps_source_null, eps_target_null, eps_source, eps_target = (
-                        diffusion.get_eps_prediction(
+                        diffusion.get_model_prediction(
                             [z_t_source, z_t_target] * 2,
                             [timestep] * 4,
                             [
@@ -261,8 +262,8 @@ if __name__ == "__main__":
                 optimizer.step()
 
             # 5. collect attention maps
-            if config.ddim_inversion:
-                inverted_zs = diffusion.ddim_inversion(
+            if config.do_inversion:
+                inverted_zs = diffusion.inversion(
                     z_source, collect_timesteps, text_emb_source
                 )
             store_hook.reset()
@@ -271,11 +272,11 @@ if __name__ == "__main__":
                     z_t_target, eps = diffusion.noise_input(
                         z_target, timestep, collect_noise[idx]
                     )
-                    if config.ddim_inversion:
+                    if config.do_inversion:
                         z_t_source = inverted_zs[idx]
                     else:
                         z_t_source, _ = diffusion.noise_input(z_source, timestep, eps)
-                    _ = diffusion.get_eps_prediction(
+                    _ = diffusion.get_model_prediction(
                         [z_t_source, z_t_target],
                         [timestep] * 2,
                         [text_emb_source_compel, text_emb_target_compel],
