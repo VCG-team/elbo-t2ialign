@@ -8,7 +8,7 @@ output_folder=$(basename $0 | rev | cut -d '.' -f 2- | rev)
 output_path="./output/${output_folder}"
 
 # experiment datasets
-datasets=("ane" "dvmp" "acb6k")
+datasets=("ane" "dvmp" "abc6k")
 
 # generation_with_elbo.py arguments using here document, see full list of options in ./config/method/generation.yaml
 # diffusion.variant options: runwayml/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3

@@ -89,6 +89,7 @@ if __name__ == "__main__":
         shutil.rmtree(img_out_path)
     os.makedirs(img_out_path, exist_ok=True)
     dataset = TextDataset(config)
+    data_len = min(len(dataset), config.num_prompts)
     NON_ENTITY_KEYWORDS = set(config.non_entity_keywords)
 
     diffusion_dtype = (
@@ -115,10 +116,11 @@ if __name__ == "__main__":
 
         # 3. generate image for each text prompt
         for txt_idx, text in enumerate(
-            tqdm(dataset.prompts, desc=f"generating images of {config.dataset}...")
+            tqdm(
+                dataset.prompts[:data_len],
+                desc=f"generating images of {config.dataset}...",
+            )
         ):
-            if txt_idx >= config.num_prompts:
-                break
             # 3.1 prepare text embedding
             phrases = extract_filtered_noun_phrases(text)
             phrases_emb = [diffusion.encode_prompt(phrase) for phrase in phrases]
