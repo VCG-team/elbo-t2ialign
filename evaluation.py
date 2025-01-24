@@ -187,6 +187,7 @@ def apply_metrics(
         "m_TP_P": [],
         "m_FP": [],
         "m_FN": [],
+        "m_f1_score": [],
     }
 
     # filter and sort instance_statistics
@@ -226,12 +227,14 @@ def apply_metrics(
         TP_P = TP / (P + 1e-10)
         FP = (P - TP) / (T + P - TP + 1e-10)
         FN = (T - TP) / (T + P - TP + 1e-10)
+        f1 = 2 * TP / (T + P + 1e-10)
 
         m_IoU = np.mean(IoU[valid_idx]) * 100
         m_TP_T = np.mean(TP_T[valid_idx]) * 100
         m_TP_P = np.mean(TP_P[valid_idx]) * 100
         m_FP = np.mean(FP[valid_idx]) * 100
         m_FN = np.mean(FN[valid_idx]) * 100
+        m_f1_score = np.mean(f1[valid_idx]) * 100
 
         # save metrics
         metrics["m_IoU"].append(m_IoU)
@@ -239,6 +242,7 @@ def apply_metrics(
         metrics["m_TP_P"].append(m_TP_P)
         metrics["m_FP"].append(m_FP)
         metrics["m_FN"].append(m_FN)
+        metrics["m_f1_score"].append(m_f1_score)
 
         if sort_fn is not None:
             metrics["boundary"].append(sort_fn(instance_statistics[end - 1]))
