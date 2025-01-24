@@ -122,7 +122,7 @@ class SegDataset(Dataset):
 class TextDataset(Dataset):
     def __init__(self, config):
         self.text_data_path = config.text_data_path
-        with open(self.data_root, "r", encoding="utf-8") as f:
+        with open(self.text_data_path, "r", encoding="utf-8") as f:
             self.prompts = f.readlines()
         self.prompts = [prompt.strip() for prompt in self.prompts]
 

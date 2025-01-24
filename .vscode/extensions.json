@@ -8,6 +8,7 @@
         "ms-python.debugpy",
         "redhat.vscode-yaml",
         "ms-toolsai.datawrangler",
-        "qwtel.sqlite-viewer"
+        "qwtel.sqlite-viewer",
+        "ms-toolsai.jupyter"
     ]
 }
