@@ -25,28 +25,13 @@ NON_ENTITY_KEYWORDS = set()
 
 def extract_filtered_noun_phrases(text: str) -> List[str]:
     doc = nlp(text)
-
     noun_phrases = []
     for chunk in doc.noun_chunks:
         root_word = chunk.root.text.lower()
-        phrase = chunk.text.lower()
-
-        if root_word in NON_ENTITY_KEYWORDS:
+        if chunk.root.pos_ != "NOUN" or root_word in NON_ENTITY_KEYWORDS:
             continue
-        if any(keyword in phrase for keyword in NON_ENTITY_KEYWORDS):
-            continue
-
-        noun_phrases.append((root_word, chunk.text))
-
-    unique_phrases = []
-    seen_roots = set()
-
-    for root, phrase in noun_phrases:
-        if root not in seen_roots:
-            unique_phrases.append(phrase)
-            seen_roots.add(root)
-
-    return unique_phrases
+        noun_phrases.append(chunk.text)
+    return noun_phrases
 
 
 def parse_timesteps(timesteps: List[List]) -> List:
@@ -132,13 +117,15 @@ if __name__ == "__main__":
                 weights = [1.0] * len(phrases)
                 latent = diffusion.prepare_latent()
                 # 3.2.2 reverse diffusion process
-                for t in timesteps:
+                for t_idx, t in enumerate(timesteps):
                     # get unweight model prediction for whole sentence
                     model_pred_all = diffusion.get_model_prediction(
                         [latent], [t], [text_emb]
                     )
                     # get unweight elbo and compute alignment score
-                    if len(phrases_emb) != 0:
+                    if t_idx >= config.elbo_timesteps:
+                        weights = [1.0] * len(phrases)
+                    elif len(phrases_emb) > 1:
                         elbo = []
                         for p in phrases_emb:
                             model_pred = diffusion.get_model_prediction(

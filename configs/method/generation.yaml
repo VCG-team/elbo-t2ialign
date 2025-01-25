@@ -1,5 +1,6 @@
 # generation process settings (generation_with_elbo.py)
 infer_timesteps: 50
+elbo_timesteps: 50
 elbo_strength: 1.2
 num_imgs_per_prompt: 1
 num_prompts: 1000
