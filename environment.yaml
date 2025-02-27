@@ -34,3 +34,4 @@ dependencies:
       - bitsandbytes==0.45.0
       - openai==1.60.0
       - python-box==7.3.0
+      - clean-fid==0.1.35
