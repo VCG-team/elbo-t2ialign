@@ -2,10 +2,17 @@
 
 ## Setup
 
-### Python Environment
+### Environment
 
-A suitable [conda](https://conda.io/) environment named `elbo-t2ialign` can be created and setup with:
+1. Clone repository and install git lfs.
+```bash
+git clone https://github.com/VCG-team/elbo-t2ialign
+cd elbo-t2ialign
+git lfs install
+git lfs pull
+```
 
+2. Create [conda](https://conda.io/) env with `environment.yaml`.
 ```bash
 conda env create -f environment.yaml
 conda activate elbo-t2ialign
