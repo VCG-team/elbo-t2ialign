@@ -9,6 +9,8 @@
         "redhat.vscode-yaml",
         "ms-toolsai.datawrangler",
         "qwtel.sqlite-viewer",
-        "ms-toolsai.jupyter"
+        "ms-toolsai.jupyter",
+        "github.copilot",
+        "github.copilot-chat"
     ]
 }
