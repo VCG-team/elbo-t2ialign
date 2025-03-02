@@ -28,7 +28,7 @@ cache_dir: "./tmp/cache"
 model_dir: "./models"
 
 diffusion:
-  variant: "runwayml/stable-diffusion-v1-5"
+  variant: "stable-diffusion-v1-5/stable-diffusion-v1-5"
   device_map: "balanced"
   dtype: "fp16"
   use_safetensors: True
