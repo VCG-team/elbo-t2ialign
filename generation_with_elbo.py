@@ -113,10 +113,15 @@ if __name__ == "__main__":
 
             # 3.2 generate multiple images for each prompt
             for img_idx in range(config.num_imgs_per_prompt):
-                # 3.2.1 prepare weight and latent
+                # 3.2.1 reset seed
+                img_seed = config.seed + img_idx
+                random.seed(img_seed)
+                np.random.seed(img_seed)
+                torch.manual_seed(img_seed)
+                # 3.2.2 prepare weight and latent
                 weights = [1.0] * len(phrases)
                 latent = diffusion.prepare_latent()
-                # 3.2.2 reverse diffusion process
+                # 3.2.3 reverse diffusion process
                 for t_idx, t in enumerate(timesteps):
                     # get unweight model prediction for whole sentence
                     model_pred_all = diffusion.get_model_prediction(
@@ -152,6 +157,7 @@ if __name__ == "__main__":
                     latent = diffusion.step(
                         latent, t, max(0, t - step_ratio), model_pred
                     )
-                # 3.2.3 save image
+                # 3.2.4 save image
                 img = diffusion.decode_latent(latent)[0]
-                img.save(os.path.join(img_out_path, f"{txt_idx}_{img_idx}.png"))
+                img_name = f"txt{txt_idx}_img{img_idx}_seed{img_seed}.png"
+                img.save(os.path.join(img_out_path, img_name))

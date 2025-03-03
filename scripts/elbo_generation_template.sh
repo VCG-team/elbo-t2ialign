@@ -11,7 +11,7 @@ output_path="./output/${output_folder}"
 datasets=("ane" "dvmp" "abc6k")
 
 # generation_with_elbo.py arguments using here document, see full list of options in ./config/method/generation.yaml
-# diffusion.variant options: stable-diffusion-v1-5/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3
+# diffusion.variant options: stable-diffusion-v1-5/stable-diffusion-v1-5, CompVis/stable-diffusion-v1-4, stabilityai/sdxl-turbo, stabilityai/sd-turbo, stabilityai/stable-diffusion-2-1-base, stabilityai/stable-diffusion-xl-base-1.0, stabilityai/stable-diffusion-2, stabilityai/stable-diffusion-2-1, stabilityai/stable-diffusion-2-base, CompVis/stable-diffusion-v1-2, CompVis/stable-diffusion-v1-3, playgroundai/playground-v2.5-1024px-aesthetic
 generation_args=$(cat << EOS
 diffusion.variant=stable-diffusion-v1-5/stable-diffusion-v1-5
 elbo_strength=1.2

@@ -42,10 +42,10 @@ class Diffusion:
             )
             self.guidance_scale = 7.5
             with torch.inference_mode():
-                self.alphas = torch.sqrt(pipe.scheduler.alphas_cumprod).to(
+                self.alphas = torch.sqrt(self.scheduler.alphas_cumprod).to(
                     pipe.unet.device, dtype=pipe.unet.dtype
                 )
-                self.sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod).to(
+                self.sigmas = torch.sqrt(1 - self.scheduler.alphas_cumprod).to(
                     pipe.unet.device, dtype=pipe.unet.dtype
                 )
         elif isinstance(pipe, StableDiffusionXLPipeline):
@@ -61,10 +61,10 @@ class Diffusion:
             )
             self.guidance_scale = 5.0
             with torch.inference_mode():
-                self.alphas = torch.sqrt(pipe.scheduler.alphas_cumprod).to(
+                self.alphas = torch.sqrt(self.scheduler.alphas_cumprod).to(
                     pipe.unet.device, dtype=pipe.unet.dtype
                 )
-                self.sigmas = torch.sqrt(1 - pipe.scheduler.alphas_cumprod).to(
+                self.sigmas = torch.sqrt(1 - self.scheduler.alphas_cumprod).to(
                     pipe.unet.device, dtype=pipe.unet.dtype
                 )
             self.add_time_ids = pipe._get_add_time_ids(
