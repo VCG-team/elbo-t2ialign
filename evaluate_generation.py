@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import warnings
 from collections import defaultdict
 
@@ -40,7 +41,7 @@ if __name__ == "__main__":
     for img_file in tqdm(os.listdir(img_dir), desc="computing clip scores..."):
         img_path = os.path.join(img_dir, img_file)
         img = Image.open(img_path).convert("RGB")
-        txt_idx = int(img_file.split("_")[0])
+        txt_idx = int(re.search(r"\d+", img_file.split("_")[0]).group())
         inputs = clip_processor(
             text=dataset.prompts[txt_idx],
             images=[img],
