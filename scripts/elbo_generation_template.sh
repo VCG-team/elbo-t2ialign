@@ -30,5 +30,5 @@ do
     # 1. generation
     CUDA_VISIBLE_DEVICES=${device} python generation_with_elbo.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset} ${generation_args}
     # 2. evaluation
-    python evaluate_generation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset} ${evaluation_args}
+    CUDA_VISIBLE_DEVICES=${device} python evaluate_generation.py --dataset-cfg ./configs/dataset/${dataset}.yaml output_path.${dataset}=${output_path}/${dataset} ${evaluation_args}
 done
