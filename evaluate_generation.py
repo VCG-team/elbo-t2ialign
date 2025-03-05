@@ -47,7 +47,7 @@ if __name__ == "__main__":
             images=[img],
             return_tensors="pt",
             padding=True,
-        )
+        ).to(clip_model.device)
         outputs = clip_model(**inputs)
         clip_score_per_img[txt_idx].append(outputs.logits_per_image.cpu().numpy())
 
