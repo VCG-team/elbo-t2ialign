@@ -28,7 +28,7 @@ def load_image_label_list_from_npy(img_name_list, label_file_path):
 
 def convert_dataset(img_paths, gt_paths, idx2cls, dataset_name):
     """
-    Generate dataset metainfo ({dataset_name}.yaml), dataset class labels (cls_labels.npy), dataset images' names (id.txt). See ./config/dataset for metainfo examples, ./data/{dataset_name} for class labels and images' names examples.
+    Generate dataset metainfo ({dataset_name}.yaml), dataset class labels (cls_labels.npy), dataset images' names (id.txt). See ./metadata/{dataset_name} for metainfo, class labels and images' names examples.
 
     Generated {dataset_name}.yaml still needs to be modified manually, such as data_root, data_name_list, img_path, gt_path, etc.
 
@@ -75,16 +75,16 @@ def convert_dataset(img_paths, gt_paths, idx2cls, dataset_name):
         cls_labels[img_path.stem] = labels
 
     # export files to default folder
-    os.makedirs("./configs/dataset", exist_ok=True)
-    metainfo_path = f"./configs/dataset/{dataset_name}.yaml"
+    os.makedirs(f"./metadata/{dataset_name}", exist_ok=True)
+    metainfo_path = f"./metadata/{dataset_name}/info.yaml"
     metainfo_config = OmegaConf.create(metainfo)
     OmegaConf.save(metainfo_config, metainfo_path)
 
-    os.makedirs(f"./data/{dataset_name}", exist_ok=True)
-    cls_labels_path = f"./data/{dataset_name}/cls_labels.npy"
+    os.makedirs(f"./matadata/{dataset_name}", exist_ok=True)
+    cls_labels_path = f"./matadata/{dataset_name}/cls_labels.npy"
     np.save(cls_labels_path, cls_labels, allow_pickle=True)
 
-    img_names_path = f"./data/{dataset_name}/id.txt"
+    img_names_path = f"./matadata/{dataset_name}/id.txt"
     with open(img_names_path, "w") as f:
         for img_name in img_names:
             f.write(f"{img_name}\n")
@@ -96,7 +96,7 @@ class SegDataset(Dataset):
         self.data_root = config.data_root
         self.img_name_list = load_img_name_list(config.data_name_list)
         # checking use cls_predict.npy or cls_labels.npy
-        # see ./configs/io/io.yaml for details
+        # see ./configs/io.yaml for details
         if config.get("use_cls_predict", False):
             label_file_path = os.path.join(config.output_path, "cls_predict.npy")
         else:

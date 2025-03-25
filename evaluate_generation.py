@@ -16,7 +16,7 @@ from utils.parse_args import parse_args
 if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
-    config = parse_args("evaluation")
+    config = parse_args("evaluate_generation")
     dataset = TextDataset(config)
     output_dir = config.output_path
     img_dir = os.path.join(output_dir, "images")

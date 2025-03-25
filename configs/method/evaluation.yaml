@@ -1,7 +1,0 @@
-# evaluation process settings (evaluation.py)
-start: 1 # evaluation start threshold.
-end: 99 # evaluation end threshold.
-bucket_num: 10 # The number of data buckets. Log file saves evaluation results for each bucket.
-n_jobs: 6 # number of jobs when using Parallel
-save_mask: False # whether save mask after applying threshold
-enable_crf: False # whether enable CRF post-processing

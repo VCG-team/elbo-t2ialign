@@ -1,0 +1,32 @@
+# output config
+output_path: ""
+
+# input config
+# fix random seed
+seed: 4307
+
+# cache path to save generated text
+cache_dir: "./tmp/cache"
+# cache path to save models
+model_dir: "./models"
+
+diffusion:
+  variant: "stable-diffusion-v1-5/stable-diffusion-v1-5"
+  device_map: "balanced"
+  dtype: "fp16"
+  use_safetensors: True
+clip:
+  variant: "openai/clip-vit-large-patch14"
+  device_map: "balanced"
+  dtype: "fp32"
+img2text:
+  variant: "Salesforce/blip-image-captioning-large"
+  # some img2text models still don't support balanced device_map
+  # see: https://github.com/huggingface/transformers/issues/29786
+  device_map: "cuda:0"
+  dtype: "fp32"
+  # if api_url is not None, use web api to convert image to text
+  api_key: null
+  api_url: null
+  system_prompt: ""
+  max_completion_tokens: 70

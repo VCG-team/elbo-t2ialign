@@ -1,0 +1,101 @@
+# metainfo for voc-sim dataset
+# dataset is from OVAM(CVPR 2024) https://github.com/vpulab/ovam
+# paper: https://arxiv.org/abs/2403.14291
+dataset: "voc_sim"
+data_root: "./datasets/voc_sim"
+data_name_list: "./metadata/voc_sim/val_id.txt"
+name_to_cls_labels: "./metadata/voc_sim/cls_labels.npy"
+img_path: "{data_root}/images/{img_name}.png"
+gt_path: "{data_root}/annotations/{img_name}.png"
+num_cls: 20 # not including background
+category:
+  plane: ["jet", "jetliner", "shuttle", "airplane", "plane", "aeroplane"]
+  bicycle: ["bike", "bicycle"]
+  bird:
+    [
+      "ostrich",
+      "duck",
+      "peacock",
+      "bird",
+      "seagull",
+      "penguin",
+      "swan",
+      "owl",
+      "flamingo",
+      "eagle",
+      "pelican",
+      "emu",
+      "pigeon",
+      "chicken",
+      "parrot",
+    ]
+  boat: ["ship", "kayak", "boat", "canoe", "sailboat"]
+  bottle: ["bottle", "drink"]
+  buses: ["buses", "bus", "tram"]
+  car: ["cab", "taxi", "jeep", "cooper", "truck", "car", "wheel", "suv"]
+  cat: ["lynx", "kitten", "cat"]
+  chair: ["stool", "chair"]
+  cow: ["bison", "cattle", "bull", "cow"]
+  table: ["dining table", "diningtable", "table", "desk"]
+  dog: ["dog", "puppy", "dachshund", "pug"]
+  horse: ["pony", "horse"]
+  motorbike: ["motorbike", "scooter"]
+  people:
+    [
+      "they",
+      "he",
+      "skateboarder",
+      "couple",
+      "woman",
+      "player",
+      "she",
+      "wrestler",
+      "man",
+      "him",
+      "skier",
+      "her",
+      "chef",
+      "girl",
+      "boy",
+      "parent",
+      "person",
+      "baby",
+      "child",
+      "groom",
+      "bride",
+      "people",
+      "speaker",
+    ]
+  plant: ["potted plant", "pottedplant", "plant", "flower"]
+  sheep: ["lamb", "goat", "sheep"]
+  sofa: ["couch", "sofa"]
+  train: ["train", "high-speed train", "locomotive"]
+  monitor: ["television", "tvmonitor", "screen", "tv", "monitor"]
+bg_category:
+  [
+    "ground",
+    "land",
+    "grass",
+    "tree",
+    "building",
+    "wall",
+    "sky",
+    "lake",
+    "water",
+    "river",
+    "sea",
+    "railway",
+    "railroad",
+    "keyboard",
+    "helmet",
+    "cloud",
+    "house",
+    "mountain",
+    "ocean",
+    "road",
+    "rock",
+    "street",
+    "valley",
+    "bridge",
+    "sign",
+  ]
