@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 import random
 import shutil
 import warnings
@@ -24,7 +25,6 @@ from utils.attention_control import (
 )
 from utils.datasets import SegDataset
 from utils.diffusion import Diffusion
-from utils.img2text import Img2Text
 from utils.parse_args import parse_args
 
 T = torch.Tensor
@@ -83,6 +83,9 @@ if __name__ == "__main__":
         if os.path.exists(cross_att_out_path):
             shutil.rmtree(cross_att_out_path)
         os.makedirs(cross_att_out_path, exist_ok=True)
+    if hasattr(config, "name_to_prompts"):
+        with open(config.name_to_prompts, "rb") as file:
+            name_to_prompts = pickle.load(file)
     if config.elbo_path:
         if not os.path.exists(config.elbo_path):
             raise FileNotFoundError(f"ELBO file not found: {config.elbo_path}")
@@ -90,7 +93,6 @@ if __name__ == "__main__":
     if config.save_elbo:
         saved_elbo = {}
     dataset = SegDataset(config)
-    img2text = Img2Text(config)
     category = list(config.category.keys())
     elbo_timesteps = parse_timesteps(config.elbo_timesteps)
     collect_timesteps = parse_timesteps(config.collect_timesteps)
@@ -151,11 +153,15 @@ if __name__ == "__main__":
                 elbo = []
                 for cls_idx in labels:
                     source_cls = category[cls_idx]
-                    elbo_prompt = config.elbo_text.prompt.format(source_cls=source_cls)
-                    elbo_gen = img2text(img, name, elbo_prompt)
-                    elbo_text = config.elbo_text.template.format(
-                        source_cls=source_cls, elbo_gen=elbo_gen
-                    )
+                    if config.elbo_text.type == "prompt":
+                        elbo_text = config.elbo_text.prompt.format(
+                            source_cls=source_cls
+                        )
+                    elif config.elbo_text.type == "file":
+                        phrase_idx = name_to_prompts[name]["subject"].index(source_cls)
+                        elbo_text = (
+                            "a photo of " + name_to_prompts[name]["phrase"][phrase_idx]
+                        )
                     text_emb_source = diffusion.encode_prompt(elbo_text)
                     loss = 0
                     for idx, t in enumerate(elbo_timesteps):
@@ -172,9 +178,12 @@ if __name__ == "__main__":
                     saved_elbo[name][category[cls_idx]] = elbo_min_max[idx].item()
 
             # 2. collect attention maps
-            source_text = "a photo of " + ", ".join(
-                [category[cls_idx] for cls_idx in labels]
-            )
+            if config.source_text.type == "prompt":
+                source_text = config.source_text.prompt.format(
+                    classes=", ".join([category[cls_idx] for cls_idx in labels])
+                )
+            elif config.source_text.type == "file":
+                source_text = name_to_prompts[name]["prompt"]
             text_emb_source = diffusion.encode_prompt(source_text)
             store_hook.reset()
             for idx, t in enumerate(collect_timesteps):

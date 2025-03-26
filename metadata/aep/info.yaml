@@ -1,0 +1,86 @@
+# metadata for the AEP dataset
+dataset: aep
+data_root: "./datasets/aep"
+data_name_list: "./metadata/aep/val_id.txt"
+name_to_cls_labels: "./metadata/aep/cls_labels.npy"
+name_to_prompts: "./metadata/aep/prompts.pkl"
+img_path: "{data_root}/images/{img_name}.png"
+gt_path: "{data_root}/annotations/{img_name}_gt.png"
+num_cls: 38 # not including background
+category:
+  backpack:
+    - backpack
+  crown:
+    - crown
+  suitcase:
+    - suitcase
+  chair:
+    - chair
+  balloon:
+    - balloon
+  bow:
+    - bow
+  car:
+    - car
+  bowl:
+    - bowl
+  bench:
+    - bench
+  clock:
+    - clock
+  camera:
+    - camera
+  umbrella:
+    - umbrella
+  guitar:
+    - guitar
+  shoe:
+    - shoe
+  hat:
+    - hat
+  surfboard:
+    - surfboard
+  skateboard:
+    - skateboard
+  bicycle:
+    - bicycle
+  cat:
+    - cat
+  dog:
+    - dog
+  bird:
+    - bird
+  bear:
+    - bear
+  lion:
+    - lion
+  horse:
+    - horse
+  elephant:
+    - elephant
+  monkey:
+    - monkey
+  frog:
+    - frog
+  turtle:
+    - turtle
+  rabbit:
+    - rabbit
+  mouse:
+    - mouse
+  panda:
+    - panda
+  zebra:
+    - zebra
+  gorilla:
+    - gorilla
+  penguin:
+    - penguin
+  apple:
+    - apple
+  tomato:
+    - tomato
+  banana:
+    - banana
+  strawberry:
+    - strawberry
