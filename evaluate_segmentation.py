@@ -1,6 +1,7 @@
 # Modified from MCTFormer(CVPR 2022) https://github.com/xulianuwa/MCTformer/blob/main/evaluation.py
 import json
 import os
+import pickle
 import shutil
 import sys
 import warnings
@@ -62,16 +63,28 @@ def load_gt_and_predict(predict_folder: str, config: DictConfig) -> List[Tuple]:
         idx_to_cls[idx].append(cls)
     # load dataset
     dataset = SegDataset(config)
+    # for PNG dataset, we need to load name_to_segment2cls
+    if config.dataset == "png":
+        with open(config.name_to_segment2cls, "rb") as f:
+            segment2cls = pickle.load(f)
 
     def process(idx):
         # 1. load ground truth
-        _, img_path, gt_path, _ = dataset[idx]
+        img_name, img_path, gt_path, _ = dataset[idx]
         gt = np.array(Image.open(gt_path))
         # follow GroupViT (CVPR 2022), we only use first 80 classes in COCO, set other classes to background
         # related code: https://github.com/NVlabs/GroupViT/blob/main/convert_dataset/convert_coco_object.py
         if config.dataset == "coco":
             gt = gt + 1
             gt[gt > 80] = 0
+        # for PNG dataset, we follow https://cocodataset.org/#format-data to process gt
+        if config.dataset == "png":
+            gt = gt.astype(np.uint32)
+            gt = gt[:, :, 0] + gt[:, :, 1] * 256 + gt[:, :, 2] * 256 * 256
+            new_gt = np.zeros_like(gt, dtype=np.uint8)
+            for segment in segment2cls[img_name]:
+                new_gt[gt == segment] = segment2cls[img_name][segment] + 1
+            gt = new_gt
 
         # 2. load predict
         h, w = gt.shape

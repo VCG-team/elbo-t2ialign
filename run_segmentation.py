@@ -8,6 +8,7 @@ from math import sqrt
 from typing import List
 
 import numpy as np
+import spacy
 import torch
 import torch.nn.functional as F
 from cv2 import imwrite
@@ -97,6 +98,7 @@ if __name__ == "__main__":
     elbo_timesteps = parse_timesteps(config.elbo_timesteps)
     collect_timesteps = parse_timesteps(config.collect_timesteps)
 
+    nlp = spacy.load("en_core_web_sm")
     diffusion_dtype = (
         torch.float16 if config.diffusion.dtype == "fp16" else torch.float32
     )
@@ -199,14 +201,25 @@ if __name__ == "__main__":
             for idx, cls_idx in enumerate(labels):
                 # get the position of cls_name occurrence in the source text
                 source_cls = category[cls_idx]
+                if config.source_text.type == "prompt":
+                    pos_text = source_cls
+                elif config.source_text.type == "file":
+                    phrase_idx = name_to_prompts[name]["subject"].index(source_cls)
+                    phrase = name_to_prompts[name]["phrase"][phrase_idx]
+                    if source_cls in phrase.split(" "):
+                        pos_text = source_cls
+                    else:
+                        pos_text = ""
+                        doc = nlp(phrase)
+                        for token in doc:
+                            if token.pos_ == "NOUN":
+                                pos_text += token.text + " "
+                        pos_text = pos_text.strip()
                 source_text_id = pipe.tokenizer.encode(source_text)
-                source_cls_id = pipe.tokenizer.encode(source_cls)[1:-1]
-                for start in range(len(source_text_id) - len(source_cls_id) + 1):
-                    if (
-                        source_text_id[start : start + len(source_cls_id)]
-                        == source_cls_id
-                    ):
-                        pos = [start + i for i in range(len(source_cls_id))]
+                pos_text_id = pipe.tokenizer.encode(pos_text)[1:-1]
+                for start in range(len(source_text_id) - len(pos_text_id) + 1):
+                    if source_text_id[start : start + len(pos_text_id)] == pos_text_id:
+                        pos = [start + i for i in range(len(pos_text_id))]
                         break
                 # use elbo to normalize cross attention
                 cross_att = aggregate_cross_att(store_hook, 0, pos, config)

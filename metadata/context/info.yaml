@@ -112,15 +112,4 @@ category:
   water: ["water"]
   window: ["window"]
   wood: ["wood"]
-bg_category:
-  [
-    "lake",
-    "river",
-    "sea",
-    "railway",
-    "railroad",
-    "helmet",
-    "ocean",
-    "valley",
-    "bridge",
-  ]
+bg_category: []
