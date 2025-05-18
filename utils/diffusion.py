@@ -13,6 +13,7 @@ from diffusers import (
 from diffusers.models.transformers.transformer_sd3 import SD3Transformer2DModel
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from PIL import Image
+from torch.optim import Adam
 
 T = torch.Tensor
 TN = Optional[T]
@@ -204,7 +205,7 @@ class Diffusion:
         guidance_scale: Optional[float] = None,
     ) -> T:
         """
-        do classifier free guidance
+        do classifier free guidance\n
         paper: Classifier-Free Diffusion Guidance https://openreview.net/pdf?id=qw8AKxfYbI
         """
         if guidance_scale is None:
@@ -253,20 +254,102 @@ class Diffusion:
         return next_sample
 
     @torch.inference_mode
-    def inversion(self, z_0: T, timesteps: List[int], cond_emb: T) -> List[T]:
+    def inversion(
+        self,
+        z_0: T,
+        timesteps: List[int],
+        cond_emb: T,
+        uncond_emb: T,
+        guidance_scale: float = None,
+    ) -> List[T]:
         """
-        denote timesteps as [t1, t2, ..., tn], invert z_0 to z_t1, z_t2, ..., z_tn sequentially
-        return: [z_t1, z_t2, ..., z_tn]
-        code from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+        denote timesteps as [t1, t2, ..., tn], invert z_0 to z_t1, z_t2, ..., z_tn sequentially\n
+        code modified from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+
+        Args:
+            z_0: latent of an image
+            timesteps: [t1, t2, ..., tn]
+            cond_emb: conditional text embedding
+        Returns:
+            z_ts: [z_t1, z_t2, ..., z_tn]
         """
         z_ts = []
         cur_t, cur_z = 0, z_0.clone().detach()
         for t in timesteps:
-            model_output = self.get_model_prediction([cur_z], [t], [cond_emb])
+            model_output_cond, model_output_uncond = self.get_model_prediction(
+                [cur_z, cur_z], [t, t], [cond_emb, uncond_emb]
+            ).chunk(2)
+            model_output = self.classifier_free_guidance(
+                model_output_uncond, model_output_cond, guidance_scale
+            )
             cur_z = self.step(cur_z, cur_t, t, model_output)
             cur_t = t
             z_ts.append(cur_z)
         return z_ts
+
+    def null_optimization(
+        self,
+        z_ts: List[T],
+        timesteps: List[int],
+        cond_emb: T,
+        uncond_emb: T,
+        inner_steps: int,
+        stop_eps: float,
+        lr: float,
+        guidance_scale: float = None,
+    ) -> List[T]:
+        """
+        null-text optimization can improve the inversion result\n
+        paper: Null-text Inversion(CVPR 2023) https://ieeexplore.ieee.org/document/10205188\n
+        code modified from: https://github.com/google/prompt-to-prompt/blob/main/null_text_w_ptp.ipynb
+
+        Args:
+            z_ts: [z_t0, z_t1, z_t2, ..., z_tn]
+            timesteps: [t0, t1, t2, ..., tn]
+            cond_emb: conditional text embedding
+            uncond_emb: unconditional text embedding
+            inner_steps: number of inner steps
+            stop_eps: stop threshold
+            lr: learning rate
+        Returns:
+            null_embs: [null_emb_tn, ..., null_emb_t2, null_emb_t1]
+        """
+        null_embs = []
+        cur_z = z_ts[-1].clone().detach()
+        for t_idx in range(len(z_ts) - 1, 0, -1):
+            cur_t = timesteps[t_idx]
+            next_t, next_z = timesteps[t_idx - 1], z_ts[t_idx - 1].clone().detach()
+            null_emb = uncond_emb.clone().detach()
+            null_emb.requires_grad = True
+            optimizer = Adam([null_emb], lr=lr * (1.0 - t_idx / (2.0 * len(z_ts))))
+            with torch.no_grad():
+                model_output_cond = self.get_model_prediction(
+                    [cur_z], [cur_t], [cond_emb]
+                )
+            for _ in range(inner_steps):
+                optimizer.zero_grad()
+                model_output_uncond = self.get_model_prediction(
+                    [cur_z], [cur_t], [null_emb]
+                )
+                model_output = self.classifier_free_guidance(
+                    model_output_uncond, model_output_cond, guidance_scale
+                )
+                next_z_predict = self.step(cur_z, cur_t, next_t, model_output)
+                loss = F.mse_loss(next_z_predict, next_z)
+                loss.backward()
+                optimizer.step()
+                if loss.item() < (2 * t_idx + 1) * stop_eps:
+                    break
+            null_embs.append(null_emb[:-1].detach())
+            with torch.no_grad():
+                model_output_uncond = self.get_model_prediction(
+                    [cur_z], [cur_t], [null_emb]
+                )
+                model_output = self.classifier_free_guidance(
+                    model_output_uncond, model_output_cond, guidance_scale
+                )
+                cur_z = self.step(cur_z, cur_t, next_t, model_output)
+        return null_embs
 
     def get_elbo(
         self,
@@ -291,7 +374,7 @@ class Diffusion:
         )
         # flow matching loss, modified from https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/train_dreambooth_sd3.py#L1631
         if isinstance(self.pipe, StableDiffusion3Pipeline):
-            return F.mse_loss(eps - z, model_output, reduction="mean")
+            return F.mse_loss(eps - z, model_output)
         # other loss function, copied from diffusers.DDIMScheduler.step
         alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
         beta_prod_t = 1 - alpha_prod_t
@@ -307,7 +390,7 @@ class Diffusion:
             pred_epsilon = (alpha_prod_t**0.5) * model_output + (beta_prod_t**0.5) * z_t
         else:
             pred_epsilon = model_output
-        return F.mse_loss(eps, pred_epsilon, reduction="mean")
+        return F.mse_loss(eps, pred_epsilon)
 
     def prepare_latent(self) -> T:
         if isinstance(self.pipe, StableDiffusion3Pipeline):
@@ -329,7 +412,11 @@ class Diffusion:
         return latent
 
     def generate_image(
-        self, prompt: str, negtive_prompt: str = "", sample_timesteps: int = 50
+        self,
+        prompt: str,
+        negtive_prompt: str = "",
+        sample_timesteps: int = 50,
+        guidance_scale: float = None,
     ) -> Image:
         # 1. prepare latent
         latent = self.prepare_latent()
@@ -349,7 +436,7 @@ class Diffusion:
                 [latent, latent], [t, t], [pos_text_emb, neg_text_emb]
             ).chunk(2)
             model_output = self.classifier_free_guidance(
-                model_output_uncond, model_output_cond
+                model_output_uncond, model_output_cond, guidance_scale
             )
             latent = self.step(latent, t, max(0, t - step_ratio), model_output)
 

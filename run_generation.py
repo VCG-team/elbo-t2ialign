@@ -95,9 +95,9 @@ if __name__ == "__main__":
         step_ratio = train_timesteps // config.infer_timesteps
         timesteps = list(range(train_timesteps - 1, 0, -step_ratio))
 
-        # 2. prepare null text embedding
-        negtive_prompt = ""
-        neg_text_emb = diffusion.encode_prompt(negtive_prompt)
+        # 2. prepare negative text embedding
+        negative_prompt = ""
+        neg_text_emb = diffusion.encode_prompt(negative_prompt)
 
         # 3. generate image for each text prompt
         for txt_idx, text in enumerate(
@@ -136,9 +136,7 @@ if __name__ == "__main__":
                             model_pred = diffusion.get_model_prediction(
                                 [latent], [t], [p]
                             )
-                            elbo.append(
-                                F.mse_loss(model_pred_all, model_pred, reduction="mean")
-                            )
+                            elbo.append(F.mse_loss(model_pred_all, model_pred))
                         elbo = torch.stack(elbo)
                         elbo = (elbo - elbo.min()) / (elbo.max() - elbo.min())
                         weights = torch.round(
