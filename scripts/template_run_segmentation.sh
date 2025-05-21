@@ -8,7 +8,7 @@ output_folder=$(basename $0 | rev | cut -d '.' -f 2- | rev)
 output_path="./output/${output_folder}"
 
 # experiment datasets
-datasets=("aep" "voc_sim" "coco_cap" "voc" "context" "coco" "ade20k")
+datasets=("aep" "png" "voc_sim" "coco_cap" "voc" "context" "coco" "ade20k")
 # which dataset variant to use, supported:
 # 1. "": original dataset
 # 2. "_100": small dataset(100 images) randomly selected from original dataset
@@ -58,6 +58,9 @@ do
         CUDA_VISIBLE_DEVICES=${device} python run_classification.py --dataset-cfg ./metadata/${dataset}/info.yaml output_path=${output_path}/${dataset}${dataset_suffix} data_name_list=./metadata/${dataset}/val_id${dataset_suffix}.txt ${classification_args}
     fi
     # 2. segmentation
+    if [ "${dataset}" = "aep" ] || [ "${dataset}" = "png" ]; then
+        segmentation_args="${segmentation_args} elbo_text.type=file"
+    fi
     CUDA_VISIBLE_DEVICES=${device} python run_segmentation.py --dataset-cfg ./metadata/${dataset}/info.yaml output_path=${output_path}/${dataset}${dataset_suffix} data_name_list=./metadata/${dataset}/val_id${dataset_suffix}.txt ${segmentation_args}
     # 3. evaluation
     python evaluate_segmentation.py --dataset-cfg ./metadata/${dataset}/info.yaml output_path=${output_path}/${dataset}${dataset_suffix} data_name_list=./metadata/${dataset}/val_id${dataset_suffix}.txt ${evaluation_args}
