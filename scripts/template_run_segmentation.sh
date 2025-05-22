@@ -59,7 +59,7 @@ do
     fi
     # 2. segmentation
     if [ "${dataset}" = "aep" ] || [ "${dataset}" = "png" ]; then
-        segmentation_args="${segmentation_args} elbo_text.type=file"
+        segmentation_args="${segmentation_args} elbo_text.type=file source_text.type=file"
     fi
     CUDA_VISIBLE_DEVICES=${device} python run_segmentation.py --dataset-cfg ./metadata/${dataset}/info.yaml output_path=${output_path}/${dataset}${dataset_suffix} data_name_list=./metadata/${dataset}/val_id${dataset_suffix}.txt ${segmentation_args}
     # 3. evaluation

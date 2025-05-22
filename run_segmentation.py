@@ -185,7 +185,9 @@ if __name__ == "__main__":
                     classes=", ".join([category[cls_idx] for cls_idx in labels])
                 )
             elif config.source_text.type == "file":
-                source_text = name_to_prompts[name]["prompt"]
+                source_text = config.source_text.prompt.format(
+                    classes=", ".join(name_to_prompts[name]["phrase"])
+                )
             text_emb_source = diffusion.encode_prompt(source_text)
             store_hook.reset()
             for idx, t in enumerate(collect_timesteps):
