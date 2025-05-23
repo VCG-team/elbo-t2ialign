@@ -180,9 +180,14 @@ if __name__ == "__main__":
                     saved_elbo[name][category[cls_idx]] = elbo_min_max[idx].item()
 
             # 2. collect attention maps
-            source_text = config.source_text.prompt.format(
-                classes=", ".join([category[cls_idx] for cls_idx in labels])
-            )
+            if config.source_text.type == "prompt":
+                source_text = config.source_text.prompt.format(
+                    classes=", ".join([category[cls_idx] for cls_idx in labels])
+                )
+            elif config.source_text.type == "file":
+                source_text = config.source_text.prompt.format(
+                    classes=", ".join(name_to_prompts[name]["phrase"])
+                )
             text_emb_source = diffusion.encode_prompt(source_text)
             store_hook.reset()
             for idx, t in enumerate(collect_timesteps):
@@ -198,7 +203,20 @@ if __name__ == "__main__":
             for idx, cls_idx in enumerate(labels):
                 # get the position of cls_name occurrence in the source text
                 source_cls = category[cls_idx]
-                pos_text = source_cls
+                if config.source_text.type == "prompt":
+                    pos_text = source_cls
+                elif config.source_text.type == "file":
+                    phrase_idx = name_to_prompts[name]["subject"].index(source_cls)
+                    phrase = name_to_prompts[name]["phrase"][phrase_idx]
+                    if source_cls in phrase.split(" "):
+                        pos_text = source_cls
+                    else:
+                        pos_text = ""
+                        doc = nlp(phrase)
+                        for token in doc:
+                            if token.pos_ == "NOUN":
+                                pos_text += token.text + " "
+                        pos_text = pos_text.strip()
                 source_text_id = pipe.tokenizer.encode(source_text)
                 pos_text_id = pipe.tokenizer.encode(pos_text)[1:-1]
                 for start in range(len(source_text_id) - len(pos_text_id) + 1):
