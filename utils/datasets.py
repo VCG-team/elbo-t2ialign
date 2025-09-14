@@ -97,10 +97,7 @@ class SegDataset(Dataset):
         self.img_name_list = load_img_name_list(config.data_name_list)
         # checking use cls_predict.npy or cls_labels.npy
         # see ./configs/io.yaml for details
-        if config.get("use_cls_predict", False):
-            label_file_path = os.path.join(config.output_path, "cls_predict.npy")
-        else:
-            label_file_path = config.name_to_cls_labels
+        label_file_path = config.name_to_cls_labels
         self.label_list = load_image_label_list_from_npy(
             self.img_name_list, label_file_path
         )
