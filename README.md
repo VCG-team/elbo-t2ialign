@@ -30,9 +30,17 @@ conda env create -f environment.yaml
 conda activate elbo-t2ialign
 python -m spacy download en_core_web_sm
 
-# download datasets from Hugging Face, and link them to project folder
+# download datasets from Hugging Face
 pip install 'huggingface_hub[cli]'
 hf download Matrix53/elbo-t2ialign --repo-type=dataset --local-dir ./datasets
+
+# unzip dataset and clean zipped files
+cd datasets
+cat dataset.tar.gz.* > dataset.tar.gz
+tar -xzf dataset.tar.gz
+mv datasets_copy/* ./
+rm -r dataset*
+cd ..
 ```
 
 ## Usage
