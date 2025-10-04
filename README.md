@@ -13,11 +13,11 @@
   <img src="pipeline.png"  height=400>
 </p>
 
-## Abstract
+## 📺 Abstract
 
 Diffusion models excel at image generation. Recent studies have shown that these models not only generate high quality images but also encode text-image alignment information through attention maps or loss functions. This information is valuable for various downstream tasks, including segmentation, text-guided image editing, and compositional image generation. However, current methods heavily rely on the assumption of perfect text-image alignment in diffusion models, which is not the case. In this paper, we propose using zero-shot referring image segmentation as a proxy task to evaluate the pixel-level image and class-level text alignment of popular diffusion models. We conduct an in-depth analysis of pixel-text misalignment in diffusion models from the perspective of training data bias. We find that misalignment occurs in images with small sized, occluded, or rare object classes. Therefore, we propose ELBO-T2IAlign—a simple yet effective method to calibrate pixel-text alignment in diffusion models based on the evidence lower bound (ELBO) of likelihood. Our method is training-free and generic, eliminating the need to identify the specific cause of misalignment and works well across various diffusion model architectures. Extensive experiments on commonly used benchmark datasets on image segmentation and generation have verified the effectiveness of our proposed calibration approach.
 
-## Setup
+## 🛠️ Setup
 ```bash
 # clone repository and install git lfs
 git clone https://github.com/VCG-team/elbo-t2ialign
@@ -43,7 +43,7 @@ rm -r dataset*
 cd ..
 ```
 
-## Usage
+## 🎨 Usage
 
 To run segmentation experiment, you can use `./scripts/template_run_segmentation.sh`:
 ```bash
@@ -63,14 +63,14 @@ If you just want to visualize a few results, you can use `scripts/run_segmentati
 
 Welcome to open an issue if you have any question.
 
-## Credits
+## 🥳 Credits
 
 We appreciate all open source projects that we use in this project:
 
 - [mmsegmentation](https://github.com/open-mmlab/mmsegmentation), [diffusers](https://github.com/huggingface/diffusers), [transformers](https://github.com/huggingface/transformers)
 - [MCTFormer](https://github.com/xulianuwa/MCTformer), [prompt-to-prompt](https://github.com/google/prompt-to-prompt), [clip-es](https://github.com/linyq2117/CLIP-ES)
 
-## Citation
+## 💕 Citation
 ```bibtex
 @article{zhou2025elbo,
     title={ELBO-T2IAlign: A Generic ELBO-Based Method for Calibrating Pixel-level Text-Image Alignment in Diffusion Models},
@@ -79,3 +79,7 @@ We appreciate all open source projects that we use in this project:
     year={2025}
 }
 ```
+
+## ⭐️ Star History
+
+![Star History Chart](https://api.star-history.com/svg?repos=VCG-team/elbo-t2ialign&type=Date)
