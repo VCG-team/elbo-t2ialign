@@ -70,6 +70,12 @@ We appreciate all open source projects that we use in this project:
 - [mmsegmentation](https://github.com/open-mmlab/mmsegmentation), [diffusers](https://github.com/huggingface/diffusers), [transformers](https://github.com/huggingface/transformers)
 - [MCTFormer](https://github.com/xulianuwa/MCTformer), [prompt-to-prompt](https://github.com/google/prompt-to-prompt), [clip-es](https://github.com/linyq2117/CLIP-ES)
 
+## 🔗 Prior Work
+
+ELBO-T2IAlign is a follow-up to our previous paper, **[DiffSegmenter](https://github.com/VCG-team/DiffSegmenter)**. The prior work explores how diffusion models encode text-image alignment information for downstream tasks, while ELBO-T2IAlign further examines the limitations of such alignment and calibrates pixel-level text-image correspondence through an ELBO-based objective.
+
+For more details, please visit the previous project page: [DiffSegmenter](https://github.com/VCG-team/DiffSegmenter).
+
 ## 💕 Citation
 ```bibtex
 @article{zhou2025elbo,
